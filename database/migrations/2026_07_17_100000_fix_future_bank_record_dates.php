@@ -31,7 +31,7 @@ return new class extends Migration
         foreach ($bankIds as $bankId) {
             try {
                 \App\Services\BankTreasuryService::recalculateBalance($bankId);
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 // Ignore if service is not ready yet
             }
         }

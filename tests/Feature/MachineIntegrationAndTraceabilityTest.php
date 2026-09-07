@@ -7,7 +7,6 @@ use App\Models\BagProduct;
 use App\Models\BagProduction;
 use App\Models\BagShift;
 use App\Models\User;
-use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,7 +16,6 @@ class MachineIntegrationAndTraceabilityTest extends TestCase
 
     protected User $operator;
     protected User $admin;
-    protected Warehouse $warehouse;
     protected BagMachine $machine1;
     protected BagMachine $machine2;
     protected BagProduct $product;
@@ -26,37 +24,18 @@ class MachineIntegrationAndTraceabilityTest extends TestCase
     {
         parent::setUp();
 
-        config(['app.installed' => true]);
-
-        $this->mock(\App\Services\LicenseService::class, function ($mock) {
-            $mock->shouldReceive('checkLicense')->andReturn([
-                'status' => 'active',
-                'days_remaining' => 30,
-                'modules' => [],
-                'max_devices' => 10,
-            ]);
-            $mock->shouldReceive('getClientId')->andReturn('test-client-id');
-        });
-
-        $this->warehouse = Warehouse::create([
-            'name'      => 'Almacén Principal Fábrica',
-            'is_active' => 1,
-        ]);
-
         $this->operator = User::create([
-            'name'         => 'Pedro Operario',
-            'email'        => 'pedro.operario.' . uniqid() . '@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'role'         => 'operario',
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Pedro Operario',
+            'email'    => 'pedro.operario.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'operario',
         ]);
 
         $this->admin = User::create([
-            'name'         => 'Admin General',
-            'email'        => 'admin.general.' . uniqid() . '@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'role'         => 'admin',
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Admin General',
+            'email'    => 'admin.general.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'admin',
         ]);
 
         $this->machine1 = BagMachine::firstOrCreate(

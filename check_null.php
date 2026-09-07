@@ -1,1 +1,0 @@
-<?php require "vendor/autoload.php"; $app = require_once "bootstrap/app.php"; $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class); $kernel->bootstrap(); $col = Illuminate\Support\Facades\DB::select("SHOW COLUMNS FROM customers WHERE Field = \"credit_limit\""); echo $col[0]->Null;

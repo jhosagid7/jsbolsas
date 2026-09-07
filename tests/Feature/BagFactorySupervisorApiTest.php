@@ -4,11 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\BagShift;
 use App\Models\BagProduction;
-use App\Models\Category;
-use App\Models\Product;
-use App\Models\Supplier;
+use App\Models\BagProduct;
 use App\Models\User;
-use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -18,64 +15,33 @@ class BagFactorySupervisorApiTest extends TestCase
 
     protected User $supervisor;
     protected User $operator;
-    protected Warehouse $warehouse;
-    protected Supplier $supplier;
-    protected Product $product;
+    protected BagProduct $product;
     protected BagShift $shift;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        config(['app.installed' => true]);
-
-        $this->mock(\App\Services\LicenseService::class, function ($mock) {
-            $mock->shouldReceive('checkLicense')->andReturn([
-                'status' => 'active',
-                'days_remaining' => 30,
-                'modules' => [],
-                'max_devices' => 10,
-            ]);
-            $mock->shouldReceive('getClientId')->andReturn('test-client-id');
-        });
-
-        $this->warehouse = Warehouse::create([
-            'name'      => 'Almacén Fábrica',
-            'is_active' => 1,
-        ]);
-
-        $this->supplier = Supplier::create([
-            'name'        => 'M&F Steel SA',
-            'taxpayer_id' => 'J-12345678-0',
-            'address'     => 'Dirección Fábrica',
-            'phone'       => '12345678',
-        ]);
-
-        $category = Category::create(['name' => 'BOLSAS']);
-
-        $this->product = Product::create([
-            'name'        => 'Bolsa Negra 50x70',
-            'sku'         => 'BN-5070',
-            'category_id' => $category->id,
-            'supplier_id' => $this->supplier->id,
-            'cost'        => 2.0,
-            'price'       => 3.5,
-            'stock_qty'   => 0,
-            'low_stock'   => 0,
+        $this->product = BagProduct::create([
+            'name'      => 'Bolsa Negra 50x70',
+            'sku'       => 'BN-5070',
+            'cost'      => 2.0,
+            'price'     => 3.5,
+            'is_active' => true,
         ]);
 
         $this->supervisor = User::create([
-            'name'         => 'Carlos Supervisor',
-            'email'        => 'carlos.supervisor@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Carlos Supervisor',
+            'email'    => 'carlos.supervisor.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Supervisor',
         ]);
 
         $this->operator = User::create([
-            'name'         => 'Pedro Operario',
-            'email'        => 'pedro.operario@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Pedro Operario',
+            'email'    => 'pedro.operario.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
         ]);
 
         $this->shift = BagShift::create([

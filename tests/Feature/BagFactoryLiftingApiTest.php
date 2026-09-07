@@ -4,13 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\BagShift;
 use App\Models\BagProduction;
-use App\Models\Category;
-use App\Models\Product;
-use App\Models\Production;
-use App\Models\ProductionDetail;
-use App\Models\Supplier;
+use App\Models\BagProduct;
 use App\Models\User;
-use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -21,83 +16,49 @@ class BagFactoryLiftingApiTest extends TestCase
     protected User $warehouseStaff;
     protected User $supervisor;
     protected User $operator;
-    protected Warehouse $warehouse;
-    protected Supplier $supplier;
-    protected Product $product1;
-    protected Product $product2;
+    protected BagProduct $product1;
+    protected BagProduct $product2;
     protected BagShift $shift;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        config(['app.installed' => true]);
-
-        $this->mock(\App\Services\LicenseService::class, function ($mock) {
-            $mock->shouldReceive('checkLicense')->andReturn([
-                'status' => 'active',
-                'days_remaining' => 30,
-                'modules' => [],
-                'max_devices' => 10,
-            ]);
-            $mock->shouldReceive('getClientId')->andReturn('test-client-id');
-        });
-
-        $this->warehouse = Warehouse::create([
-            'name'      => 'AlmacÃƒÂ©n Principal JSPOS',
-            'is_active' => 1,
+        $this->product1 = BagProduct::create([
+            'name'      => 'Bolsa Negra 50x70',
+            'sku'       => 'BN-5070',
+            'cost'      => 2.0,
+            'price'     => 3.5,
+            'is_active' => true,
         ]);
 
-        $this->supplier = Supplier::create([
-            'name'        => 'M&F Steel SA',
-            'taxpayer_id' => 'J-12345678-0',
-            'address'     => 'DirecciÃƒÂ³n FÃƒÂ¡brica',
-            'phone'       => '12345678',
-        ]);
-
-        $category = Category::create(['name' => 'BOLSAS']);
-
-        $this->product1 = Product::create([
-            'name'        => 'Bolsa Negra 50x70',
-            'sku'         => 'BN-5070',
-            'category_id' => $category->id,
-            'supplier_id' => $this->supplier->id,
-            'cost'        => 2.0,
-            'price'       => 3.5,
-            'stock_qty'   => 0,
-            'low_stock'   => 0,
-        ]);
-
-        $this->product2 = Product::create([
-            'name'        => 'Bolsa Transparente 30x40',
-            'sku'         => 'BT-3040',
-            'category_id' => $category->id,
-            'supplier_id' => $this->supplier->id,
-            'cost'        => 1.5,
-            'price'       => 2.8,
-            'stock_qty'   => 0,
-            'low_stock'   => 0,
+        $this->product2 = BagProduct::create([
+            'name'      => 'Bolsa Transparente 30x40',
+            'sku'       => 'BT-3040',
+            'cost'      => 1.5,
+            'price'     => 2.8,
+            'is_active' => true,
         ]);
 
         $this->warehouseStaff = User::create([
-            'name'         => 'Mario AlmacÃƒÂ©n',
-            'email'        => 'mario.almacen@jspos.test',
-            'password'     => bcrypt('password123'),
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Mario Almacén',
+            'email'    => 'mario.almacen.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Almacen',
         ]);
 
         $this->supervisor = User::create([
-            'name'         => 'Carlos Supervisor',
-            'email'        => 'carlos.supervisor@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Carlos Supervisor',
+            'email'    => 'carlos.supervisor.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Supervisor',
         ]);
 
         $this->operator = User::create([
-            'name'         => 'Pedro Operario',
-            'email'        => 'pedro.operario@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Pedro Operario',
+            'email'    => 'pedro.operario.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
         ]);
 
         $this->shift = BagShift::create([
@@ -181,7 +142,7 @@ class BagFactoryLiftingApiTest extends TestCase
             ]);
     }
 
-    public function test_warehouse_staff_can_receive_bultos_and_generate_jspos_production(): void
+    public function test_warehouse_staff_can_receive_bultos_and_update_status(): void
     {
         $p1 = BagProduction::create([
             'bag_shift_id' => $this->shift->id,
@@ -207,8 +168,7 @@ class BagFactoryLiftingApiTest extends TestCase
 
         $payload = [
             'production_ids' => [$p1->id, $p2->id],
-            'warehouse_id'   => $this->warehouse->id,
-            'notes'          => 'RecepciÃƒÂ³n oficial de bultos desde FÃƒÂ¡brica JSBolsas',
+            'notes'          => 'Recepción oficial de bultos desde Fábrica JSBolsas',
         ];
 
         $response = $this->actingAs($this->warehouseStaff)
@@ -220,22 +180,12 @@ class BagFactoryLiftingApiTest extends TestCase
                 'received_count' => 2,
             ]);
 
-        // 1. Verify JSPOS Production header & details were created
-        $this->assertDatabaseHas('productions', [
-            'user_id' => $this->warehouseStaff->id,
-            'status'  => 'pending',
-            'note'    => 'RecepciÃƒÂ³n oficial de bultos desde FÃƒÂ¡brica JSBolsas',
-        ]);
-
-        $this->assertDatabaseCount('production_details', 2);
-
-        // 2. Verify bag_productions were updated to 'lifted'
+        // Verify bag_productions were updated to 'lifted'
         $p1->refresh();
         $p2->refresh();
         $this->assertEquals('lifted', $p1->status);
         $this->assertEquals('lifted', $p2->status);
         $this->assertEquals($this->warehouseStaff->id, $p1->lifted_by);
         $this->assertNotNull($p1->lifted_at);
-        $this->assertNotNull($p1->jspos_production_id);
     }
 }

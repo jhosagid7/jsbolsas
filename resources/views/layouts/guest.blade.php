@@ -6,28 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ $systemTitle ?? config('app.name', 'JSPOS') }}</title>
+    <title>{{ $systemTitle ?? config('app.name', 'JSBolsas Pro') }}</title>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
     <!-- Scripts -->
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @if(file_exists(public_path('build/manifest.json')))
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @else
+        <script src="https://cdn.tailwindcss.com"></script>
+    @endif
 </head>
 
-<body class="font-sans text-gray-900 antialiased">
-    <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100">
-        <div>
-            <a href="/">
-                {{--
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500" /> --}}
-                <img src="{{ asset('assets/images/favicon.ico') }}" alt="" width="150">
-            </a>
+<body class="font-sans text-gray-900 antialiased bg-slate-900 text-slate-100">
+    <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-slate-900">
+        <div class="text-center mb-2">
+            <h1 class="text-2xl font-bold text-sky-400">JSBolsas Pro</h1>
+            <p class="text-xs text-slate-400">Sistema de Control de Fábrica</p>
         </div>
-        <h6>JSPOS v1.7</h6>
 
-        <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white shadow-md overflow-hidden sm:rounded-lg">
+        <div class="w-full sm:max-w-md mt-4 px-6 py-6 bg-slate-800 border border-slate-700 shadow-xl overflow-hidden sm:rounded-xl text-slate-200">
             {{ $slot }}
         </div>
     </div>

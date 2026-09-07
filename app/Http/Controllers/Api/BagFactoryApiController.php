@@ -7,10 +7,6 @@ use App\Models\BagShift;
 use App\Models\BagProduction;
 use App\Models\BagProduct;
 use App\Models\BagMachine;
-use App\Models\Production;
-use App\Models\ProductionDetail;
-use App\Models\Configuration;
-use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -662,91 +658,55 @@ class BagFactoryApiController extends Controller
     }
 
     /**
-     * Confirm lifting of bultos into official JSPOS general warehouse inventory.
+     * Confirm lifting of bultos into warehouse inventory.
      */
-    public function receiveLifting(Request $request)
-    {
-        $request->validate([
-            'production_ids'   => 'required|array|min:1',
-            'production_ids.*' => 'exists:bag_productions,id',
-            'warehouse_id'     => 'nullable|exists:warehouses,id',
-            'notes'            => 'nullable|string',
-        ]);
+     public function receiveLifting(Request $request)
+     {
+         $request->validate([
+             'production_ids'   => 'required|array|min:1',
+             'production_ids.*' => 'exists:bag_productions,id',
+             'notes'            => 'nullable|string',
+         ]);
 
-        $userId = auth()->id();
-        $config = Configuration::first();
+         $userId = auth()->id();
 
-        $warehouseId = $request->warehouse_id
-            ?? ($config ? $config->bolsas_warehouse_id : null)
-            ?? ($config ? $config->default_warehouse_id : null)
-            ?? Warehouse::where('is_active', 1)->first()?->id
-            ?? 1;
+         $bultos = BagProduction::whereIn('id', $request->production_ids)
+             ->where('status', 'approved')
+             ->whereNull('lifted_at')
+             ->with(['product', 'user'])
+             ->get();
 
-        $bultos = BagProduction::whereIn('id', $request->production_ids)
-            ->where('status', 'approved')
-            ->whereNull('lifted_at')
-            ->with(['product', 'user'])
-            ->get();
+         if ($bultos->isEmpty()) {
+             return response()->json([
+                 'success' => false,
+                 'message' => 'No se encontraron bultos válidos en estado aprobado pendientes de levantar',
+             ], 422);
+         }
 
-        if ($bultos->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No se encontraron bultos válidos en estado aprobado pendientes de levantar',
-            ], 422);
-        }
+         DB::beginTransaction();
+         try {
+             foreach ($bultos as $bp) {
+                 $bp->update([
+                     'status'    => 'lifted',
+                     'lifted_by' => $userId,
+                     'lifted_at' => now(),
+                 ]);
+             }
 
-        DB::beginTransaction();
-        try {
-            // 1. Create official JSPOS Production record
-            $jsposProduction = Production::create([
-                'user_id'         => $userId,
-                'production_date' => now()->toDateString(),
-                'status'          => 'pending',
-                'note'            => $request->notes ?? 'Recepción de Pre-Levantamiento JSBolsas',
-            ]);
+             DB::commit();
 
-            // 2. Create ProductionDetail records for each bulto
-            foreach ($bultos as $bp) {
-                ProductionDetail::create([
-                    'production_id'   => $jsposProduction->id,
-                    'product_id'      => $bp->product_id,
-                    'production_date' => $bp->recorded_at ? $bp->recorded_at->toDateString() : now()->toDateString(),
-                    'warehouse_id'    => $warehouseId,
-                    'material_type'   => 'Original',
-                    'quantity'        => $bp->quantity,
-                    'weight'          => $bp->weight,
-                    'operator_name'   => $bp->user->name ?? 'Operario Planta',
-                    'metadata'        => array_merge($bp->metadata ?? [], [
-                        'qr_code'           => $bp->qr_code,
-                        'bag_production_id' => $bp->id,
-                    ]),
-                    'cost'            => $bp->product->cost ?? 0,
-                ]);
+             return response()->json([
+                 'success'        => true,
+                 'message'        => "Se levantaron exitosamente {$bultos->count()} bulto(s)",
+                 'received_count' => $bultos->count(),
+             ]);
 
-                // 3. Mark bag_production as lifted
-                $bp->update([
-                    'status'              => 'lifted',
-                    'lifted_by'           => $userId,
-                    'lifted_at'           => now(),
-                    'jspos_production_id' => $jsposProduction->id,
-                ]);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success'          => true,
-                'message'          => "Se recibieron {$bultos->count()} bulto(s) e ingresaron al inventario de JSPOS",
-                'received_count'   => $bultos->count(),
-                'jspos_production' => $jsposProduction->fresh(['details.product']),
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al procesar el levantamiento oficial: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
+         } catch (\Exception $e) {
+             DB::rollBack();
+             return response()->json([
+                 'success' => false,
+                 'message' => 'Error al procesar el levantamiento: ' . $e->getMessage(),
+             ], 500);
+         }
+     }
 }

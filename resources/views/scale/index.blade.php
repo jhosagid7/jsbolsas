@@ -20,6 +20,37 @@
     @endif
 </div>
 
+@if(isset($clinicalReport) && $clinicalReport)
+<div class="card-custom mb-4 border border-info">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold text-info mb-0">
+            <i class="bi bi-qr-code-scan me-2"></i> Reporte Clínico de Trazabilidad & Pesaje
+        </h5>
+        <span class="badge bg-info text-dark font-monospace fs-6">{{ $clinicalReport->qr_code }}</span>
+    </div>
+    <div class="row g-3">
+        <div class="col-md-3">
+            <small class="text-white-50 d-block">Producto:</small>
+            <span class="fw-bold text-white">{{ $clinicalReport->product->name ?? 'N/A' }}</span>
+        </div>
+        <div class="col-md-3">
+            <small class="text-white-50 d-block">Operario:</small>
+            <span class="fw-bold text-white">{{ $clinicalReport->user->name ?? 'N/A' }}</span>
+        </div>
+        <div class="col-md-3">
+            <small class="text-white-50 d-block">Máquina / Línea:</small>
+            <span class="fw-bold text-warning">
+                {{ $clinicalReport->machine->code ?? 'N/A' }} - {{ $clinicalReport->machine->name ?? 'N/A' }}
+            </span>
+        </div>
+        <div class="col-md-3">
+            <small class="text-white-50 d-block">Peso Total:</small>
+            <span class="fw-bold text-success font-monospace fs-5">{{ number_format($clinicalReport->weight, 2) }} Kg</span>
+        </div>
+    </div>
+</div>
+@endif
+
 <!-- Pendientes de Auditoría -->
 <div class="card-custom mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">

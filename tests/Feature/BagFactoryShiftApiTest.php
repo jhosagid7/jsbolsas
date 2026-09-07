@@ -4,11 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\BagShift;
 use App\Models\BagProduction;
-use App\Models\Category;
-use App\Models\Product;
-use App\Models\Supplier;
+use App\Models\BagProduct;
 use App\Models\User;
-use App\Models\Warehouse;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -17,42 +14,16 @@ class BagFactoryShiftApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $operator;
-    protected Warehouse $warehouse;
-    protected Supplier $supplier;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        config(['app.installed' => true]);
-
-        $this->mock(\App\Services\LicenseService::class, function ($mock) {
-            $mock->shouldReceive('checkLicense')->andReturn([
-                'status' => 'active',
-                'days_remaining' => 30,
-                'modules' => [],
-                'max_devices' => 10,
-            ]);
-            $mock->shouldReceive('getClientId')->andReturn('test-client-id');
-        });
-
-        $this->warehouse = Warehouse::create([
-            'name'      => 'Almacén Fábrica',
-            'is_active' => 1,
-        ]);
-
-        $this->supplier = Supplier::create([
-            'name'        => 'M&F Steel SA',
-            'taxpayer_id' => 'J-12345678-0',
-            'address'     => 'Dirección Fábrica',
-            'phone'       => '12345678',
-        ]);
-
         $this->operator = User::create([
-            'name'         => 'Juan Pérez Operador',
-            'email'        => 'juan.operador.' . uniqid() . '@bolsas.test',
-            'password'     => bcrypt('password123'),
-            'warehouse_id' => $this->warehouse->id,
+            'name'     => 'Juan Pérez Operador',
+            'email'    => 'juan.operador.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
         ]);
     }
 
@@ -136,14 +107,14 @@ class BagFactoryShiftApiTest extends TestCase
             'status'     => 'open',
         ]);
 
-        $product1 = \App\Models\BagProduct::create([
+        $product1 = BagProduct::create([
             'name'      => 'Bolsa Vivero 1Kg',
             'sku'       => 'BV-1KG',
             'cost'      => 1.5,
             'price'     => 2.5,
             'is_active' => true,
         ]);
-        $product2 = \App\Models\BagProduct::create([
+        $product2 = BagProduct::create([
             'name'      => 'Bolsa Basura 50L',
             'sku'       => 'BB-50L',
             'cost'      => 2.0,
@@ -227,14 +198,14 @@ class BagFactoryShiftApiTest extends TestCase
 
     public function test_get_bag_factory_products_catalog(): void
     {
-        \App\Models\BagProduct::create([
+        BagProduct::create([
             'name'      => 'Bolsa Asa 30x40',
             'sku'       => 'BA-3040',
             'cost'      => 1.0,
             'price'     => 2.0,
             'is_active' => true,
         ]);
-        \App\Models\BagProduct::create([
+        BagProduct::create([
             'name'      => 'Tornillo 2 Pulgadas',
             'sku'       => 'TOR-2P',
             'cost'      => 0.5,

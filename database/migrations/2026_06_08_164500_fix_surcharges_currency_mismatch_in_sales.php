@@ -50,7 +50,7 @@ return new class extends Migration
                         }
                     }
                 }, 'orders.id');
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Log or ignore if table/columns don't exist
             \Illuminate\Support\Facades\Log::warning("Order surcharge correction error: " . $e->getMessage());
         }

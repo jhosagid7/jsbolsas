@@ -2,11 +2,9 @@
 
 namespace App\Providers;
 
-use App\Events\PrintEvent;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Event;
 
 class EventServiceProvider extends ServiceProvider
 {
@@ -19,22 +17,6 @@ class EventServiceProvider extends ServiceProvider
         Registered::class => [
             SendEmailVerificationNotification::class,
         ],
-        \App\Events\SaleCreated::class => [
-            \App\Listeners\SystemNotificationListener::class,
-        ],
-        \App\Events\PaymentReceived::class => [
-            \App\Listeners\SystemNotificationListener::class,
-        ],
-        \App\Events\CargoCreated::class => [
-            \App\Listeners\SystemNotificationListener::class,
-        ],
-        \App\Events\DescargoCreated::class => [
-            \App\Listeners\SystemNotificationListener::class,
-        ],
-        'Illuminate\Auth\Events\Login' => [
-            'App\Listeners\LoginSuccess',
-        ],
-        PrintEvent::class => [],
     ];
 
     /**

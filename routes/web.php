@@ -1,50 +1,19 @@
 <?php
 
-use App\Livewire\Roles;
-use App\Livewire\Sales;
-use App\Livewire\Users;
-use App\Livewire\PriceGroups;
-
-
-use App\Livewire\Tester;
-use App\Livewire\Welcome;
-use App\Events\PrintEvent;
-use App\Livewire\Products;
-use App\Livewire\Settings;
-use App\Livewire\CashCount;
-use App\Livewire\Customers;
-use App\Livewire\Inventory;
-use App\Livewire\Purchases;
-use App\Livewire\Suppliers;
-use App\Livewire\Categories;
-use App\Livewire\SalesReport;
-use App\Livewire\AsignarPermisos;
-use App\Livewire\PurchasesReport;
-use App\Livewire\Reports\DispatchReport;
 use Illuminate\Support\Facades\Route;
-use App\Livewire\AccountsPayableReport;
-use App\Http\Controllers\DataController;
-use App\Livewire\AccountsReceivableReport;
-use App\Livewire\CustomerStatement;
+use App\Http\Controllers\BagFactoryWebController;
 use App\Http\Controllers\ProfileController;
-use Symfony\Component\HttpKernel\DataCollector\DataCollector;
 
 /*
 |--------------------------------------------------------------------------
-| Web Routes
+| Web Routes - JSBolsas Pro
 |--------------------------------------------------------------------------
 |
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
+| Rutas web del sistema de gestión y monitoreo de la Fábrica de Bolsas.
 |
 */
 
-// Override Livewire upload route with bulletproof validation controller
-Route::post('/livewire/upload-file', [\App\Http\Controllers\LivewireUploadController::class, 'handle'])
-    ->middleware('web')
-    ->name('livewire.upload-file');
-
+// Root redirect
 Route::get('/', function () {
     if (auth()->check()) {
         return redirect()->route('dashboard');
@@ -52,396 +21,74 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// License Routes
-Route::get('/license/expired', [\App\Http\Controllers\LicenseController::class, 'expired'])->name('license.expired');
-Route::post('/license/activate', [\App\Http\Controllers\LicenseController::class, 'activate'])->name('license.activate');
-Route::post('/license/sync', [\App\Http\Controllers\LicenseController::class, 'sync'])->name('license.sync');
+// Dashboard
+Route::get('/dashboard', [BagFactoryWebController::class, 'dashboard'])
+    ->middleware(['auth'])
+    ->name('dashboard');
 
-// Installation Routes
-Route::prefix('install')->name('install.')->group(function () {
-    Route::get('/', [\App\Http\Controllers\InstallController::class, 'index'])->name('index');
-    Route::get('/step1', [\App\Http\Controllers\InstallController::class, 'step1'])->name('step1');
-    Route::get('/step2', [\App\Http\Controllers\InstallController::class, 'step2'])->name('step2');
-    Route::post('/step2', [\App\Http\Controllers\InstallController::class, 'saveDatabase'])->name('saveDatabase');
-    Route::get('/step3', [\App\Http\Controllers\InstallController::class, 'step3'])->name('step3');
-    Route::post('/step3', [\App\Http\Controllers\InstallController::class, 'runMigrations'])->name('runMigrations');
-    Route::get('/step4', [\App\Http\Controllers\InstallController::class, 'step4'])->name('step4');
-    Route::post('/step4', [\App\Http\Controllers\InstallController::class, 'activateLicense'])->name('activateLicense');
-    Route::post('/step4/connect', [\App\Http\Controllers\InstallController::class, 'connectLicenseServer'])->name('connectLicenseServer');
-    Route::post('/step4/check-status', [\App\Http\Controllers\InstallController::class, 'checkLicenseStatus'])->name('checkLicenseStatus');
-    Route::get('/step5', [\App\Http\Controllers\InstallController::class, 'step5'])->name('step5');
-    Route::post('/step5', [\App\Http\Controllers\InstallController::class, 'createAdmin'])->name('createAdmin');
-    Route::get('/finish', [\App\Http\Controllers\InstallController::class, 'finish'])->name('finish');
-    Route::get('/download-shortcut', [\App\Http\Controllers\InstallController::class, 'downloadShortcut'])->name('downloadShortcut');
-});
-
-Route::get('/dashboard', function (\Illuminate\Http\Request $request) {
-    // If it's a Driver AND NOT an Admin/Super Admin, send to Driver Dashboard
-    if (auth()->check() && method_exists(auth()->user(), 'hasRole') && auth()->user()->hasRole('Driver') && !auth()->user()->hasAnyRole(['Admin', 'Super Admin'])) {
-        return redirect()->route('driver.dashboard');
-    }
-    return app(\App\Http\Controllers\BagFactoryWebController::class)->dashboard($request);
-})->middleware(['auth'])->name('dashboard');
-
-
-
+// Protected JSBolsas Pro Routes
 Route::middleware('auth')->group(function () {
     Route::get('welcome', function () {
         return redirect()->route('dashboard');
     })->name('welcome');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    Route::post('/user/theme', [App\Http\Controllers\ThemeController::class, 'update'])->name('user.theme.update');
-});
 
+    // Scale / Báscula & Auditoría
+    Route::get('/scale', [BagFactoryWebController::class, 'scaleAudit'])->name('scale.index');
+    Route::get('/bascula', [BagFactoryWebController::class, 'scaleAudit'])->name('scale.index_alias');
+    Route::post('/scale/approve/{id}', [BagFactoryWebController::class, 'approve'])->name('approve');
+    Route::post('/scale/bulk-approve', [BagFactoryWebController::class, 'bulkApprove'])->name('bulk_approve');
+    Route::post('/scale/adjust/{id}', [BagFactoryWebController::class, 'adjust'])->name('adjust');
+    Route::post('/scale/reject/{id}', [BagFactoryWebController::class, 'reject'])->name('reject');
 
+    // Reportes de Producción
+    Route::get('/reports-fabrica', [BagFactoryWebController::class, 'reportsIndex'])->name('reports.index');
+    Route::get('/reports', [BagFactoryWebController::class, 'reportsIndex'])->name('reports.index_en');
+    Route::get('/reportes', [BagFactoryWebController::class, 'reportsIndex'])->name('reports.index_es');
+    Route::get('/reports-fabrica/pdf', [BagFactoryWebController::class, 'reportsPdf'])->name('reports.pdf');
 
-Route::middleware('auth')->group(function () {
+    // Fórmulas y Recetas
+    Route::get('/formulas', [BagFactoryWebController::class, 'formulasIndex'])->name('formulas.index');
+    Route::post('/formulas', [BagFactoryWebController::class, 'formulasStore'])->name('formulas.store');
+    Route::post('/formulas/{id}/version', [BagFactoryWebController::class, 'formulasNewVersion'])->name('formulas.new_version');
 
+    // Materias Primas
+    Route::get('/raw-materials', [BagFactoryWebController::class, 'rawMaterialsIndex'])->name('raw_materials.index');
+    Route::get('/materias-primas', [BagFactoryWebController::class, 'rawMaterialsIndex'])->name('raw_materials.index_alias');
+    Route::post('/raw-materials', [BagFactoryWebController::class, 'rawMaterialsStore'])->name('raw_materials.store');
+    Route::post('/raw-materials/{id}/price', [BagFactoryWebController::class, 'rawMaterialsUpdatePrice'])->name('raw_materials.update_price');
 
-    Route::get('categories', Categories::class)->name('categories')->middleware('can:categories.index');
-    Route::get('products/import', \App\Livewire\ProductImport::class)->name('products.import')->middleware('can:products.import');
-    Route::get('products', Products::class)->name('products')->middleware('can:products.index');
-    Route::get('catalogue-pdf', [\App\Http\Controllers\CatalogueController::class, 'generate'])->name('catalogue.pdf')->middleware('can:products.index');
-    Route::get('price-groups', PriceGroups::class)->name('price-groups')->middleware('can:products.index');
-    Route::get('suppliers', Suppliers::class)->name('suppliers')->middleware('can:suppliers.index');
-    Route::get('customers/import', \App\Livewire\CustomerImport::class)->name('customers.import')->middleware('can:customers.import');
-    Route::get('customers', Customers::class)->name('customers')->middleware('can:customers.index');
-    Route::get('customer-statement', CustomerStatement::class)->name('customer-statement')->middleware('can:customer_statement.index');
-    Route::get('debit-note/{note}/pdf', [\App\Http\Controllers\DebitNoteController::class, 'pdf'])->name('debit-note.pdf')->middleware('can:manage_debit_notes');
-    Route::get('sales', Sales::class)->name('sales')->middleware(['can:sales.index', \App\Http\Middleware\EnsureCashRegisterIsOpen::class]);
-    Route::get('credit-authorizations', \App\Livewire\CreditAuthorizationsList::class)->name('credit.authorizations')->middleware(['can:sales.index']);
-    Route::get('purchases', Purchases::class)->name('purchases')->middleware(['can:purchases.create', 'module:module_purchases']); // Usually create
-    Route::get('purchase-list', \App\Livewire\PurchaseList::class)->name('purchase.list')->middleware(['can:purchases.index', 'module:module_purchases']);
-    Route::get('inventories', Inventory::class)->name('inventories')->middleware('can:inventory.index');
-    Route::get('warehouses', \App\Livewire\Warehouses::class)->name('warehouses')->middleware('can:warehouses.index');
-    Route::get('transfers', \App\Livewire\Transfers::class)->name('transfers')->middleware(['can:transfers.create', 'module:module_multi_warehouse']);
-    Route::get('transfers/{id}/pdf', [\App\Http\Controllers\TransferController::class, 'pdf'])->name('transfers.pdf')->middleware(['can:transfers.create']);
-    Route::get('requisition', \App\Livewire\Requisition::class)->name('requisition')->middleware(['can:transfers.create', 'module:module_multi_warehouse']); // Or inventory.index?
-    Route::get('cargos', \App\Livewire\Cargos\CargosList::class)->name('cargos')->middleware('can:adjustments.create');
-    Route::get('cargos/create', \App\Livewire\Cargos\CreateCargo::class)->name('cargos.create')->middleware('can:adjustments.create');
-    Route::get('cargos/{cargo}/edit', \App\Livewire\Cargos\CreateCargo::class)->name('cargos.edit')->middleware('can:adjustments.create');
-    Route::get('cargos/{cargo}/pdf', [\App\Http\Controllers\CargoController::class, 'pdf'])->name('cargos.pdf')->middleware('can:adjustments.create');
+    // Costos y Simulador de Precios
+    Route::get('/costs', [BagFactoryWebController::class, 'costsIndex'])->name('costs.index');
+    Route::get('/costos', [BagFactoryWebController::class, 'costsIndex'])->name('costs.index_alias');
+    Route::match(['post', 'put'], '/costs', [BagFactoryWebController::class, 'costsUpdate'])->name('costs.update');
+    Route::match(['post', 'put'], '/products/{id}/technical', [BagFactoryWebController::class, 'productsTechnicalUpdate'])->name('products.technical.update');
 
-    // Production Routes
-    Route::get('production', \App\Livewire\Production\ProductionList::class)->name('production.index')->middleware(['can:production.index', 'module:module_production']);
-    Route::get('production/create/{production?}', \App\Livewire\Production\CreateProduction::class)->name('production.create')->middleware(['can:production.create', 'module:module_production']);
-    Route::get('production/{id}/pdf', [\App\Http\Controllers\ProductionController::class, 'pdf'])->name('production.pdf')->middleware(['can:production.index', 'module:module_production']);
-    Route::get('production-report', \App\Livewire\ProductionReport::class)->name('production.report')->middleware(['can:production.index']);
-    Route::get('soplados/shifts', \App\Livewire\Soplados\ShiftList::class)->name('soplados.shifts')->middleware(['can:production.index']);
-    Route::get('soplados/shifts/{shift}/pdf', [\App\Http\Controllers\ReportController::class, 'sopladosShiftPdf'])->name('soplados.shifts.pdf')->middleware(['can:production.index']);
-    Route::get('soplados/formulas', \App\Livewire\Soplados\Formulas::class)->name('soplados.formulas')->middleware(['can:production.index']);
-    Route::get('soplados/inventories', \App\Livewire\Soplados\SopladosInventoriesList::class)->name('soplados.inventories')->middleware(['can:production.index']);
-    Route::get('soplados/expected-production', \App\Livewire\Soplados\ExpectedProductionList::class)->name('soplados.expected-production')->middleware(['can:production.index']);
+    // Catálogo de Bolsas y Fichas Técnicas
+    Route::get('/catalogo-bolsas', [BagFactoryWebController::class, 'productsIndex'])->name('products.index');
+    Route::get('/catalogo', [BagFactoryWebController::class, 'productsIndex'])->name('products.index_alias');
+    Route::post('/catalogo-bolsas', [BagFactoryWebController::class, 'productsStore'])->name('products.store');
+    Route::put('/catalogo-bolsas/{id}', [BagFactoryWebController::class, 'productsUpdate'])->name('products.update');
+    Route::delete('/catalogo-bolsas/{id}', [BagFactoryWebController::class, 'productsDestroy'])->name('products.destroy');
 
-    Route::get('descargos', \App\Livewire\Descargos\DescargosList::class)->name('descargos')->middleware('can:adjustments.create');
-    Route::get('descargos/create', \App\Livewire\Descargos\CreateDescargo::class)->name('descargos.create')->middleware('can:adjustments.create');
-    Route::get('descargos/{descargo}/edit', \App\Livewire\Descargos\CreateDescargo::class)->name('descargos.edit')->middleware('can:adjustments.create');
-    Route::get('descargos/{descargo}/pdf', [\App\Http\Controllers\DescargoController::class, 'pdf'])->name('descargos.pdf')->middleware('can:adjustments.create');
+    // Usuarios y Roles de Fábrica
+    Route::get('/usuarios-fabrica', [BagFactoryWebController::class, 'usersIndex'])->name('users.index');
+    Route::get('/usuarios', [BagFactoryWebController::class, 'usersIndex'])->name('users.index_alias');
+    Route::post('/usuarios-fabrica', [BagFactoryWebController::class, 'usersStore'])->name('users.store');
+    Route::put('/usuarios-fabrica/{id}', [BagFactoryWebController::class, 'usersUpdate'])->name('users.update');
+    Route::delete('/usuarios-fabrica/{id}', [BagFactoryWebController::class, 'usersDestroy'])->name('users.destroy');
 
+    // Máquinas y Líneas
+    Route::get('/machines', [BagFactoryWebController::class, 'machinesIndex'])->name('machines.index');
+    Route::get('/maquinas', [BagFactoryWebController::class, 'machinesIndex'])->name('machines.index_alias');
+    Route::post('/machines', [BagFactoryWebController::class, 'machinesStore'])->name('machines.store');
+    Route::delete('/machines/{id}', [BagFactoryWebController::class, 'machinesDestroy'])->name('machines.destroy');
 
-    //personas / roles y permisos
-    Route::get('users', Users::class)->name('users')->middleware('can:users.index');
-    Route::get('roles', Roles::class)->name('roles')->middleware(['role:Super Admin', 'module:module_roles']);
-    Route::get('asignar', AsignarPermisos::class)->name('asignar')->middleware(['role:Super Admin', 'module:module_roles']);
-    Route::get('commissions', \App\Livewire\Commissions::class)->name('commissions')->middleware(['can:reports.commissions', 'module:module_commissions']); // Or a specific manage permission?
-    
-    // Treasury
-    Route::get('treasury', \App\Livewire\Treasury\BankTreasury::class)->name('treasury.dashboard')->middleware(['can:treasury.index', 'module:module_treasury']);
-    Route::get('reports/bank-treasury/pdf', [\App\Http\Controllers\ReportController::class, 'bankTreasuryPdf'])->name('reports.bank.treasury.pdf')->middleware(['can:treasury.index', 'module:module_treasury']);
-    
-    // Label Generator
-    Route::get('labels', \App\Livewire\LabelGenerator::class)->name('labels.index')->middleware(['can:products.labels', 'module:module_labels']);
-    Route::get('labels/pdf', [\App\Http\Controllers\LabelController::class, 'generate'])->name('labels.pdf')->middleware(['can:products.labels', 'module:module_labels']);
-
-
-
-    //data
-    Route::get('data/customers', [DataController::class, 'autocomplete_customers'])->name('data.customers');
-    Route::get('data/suppliers', [DataController::class, 'autocomplete_suppliers'])->name('data.suppliers');
-    Route::get('data/products', [DataController::class, 'autocomplete_products'])->name('data.products');
-    Route::get('customer/{id}/debt-pdf', [DataController::class, 'customerDebtPdf'])->name('customer.debt.pdf');
-
-
-    //reports
-    Route::prefix('reports')->group(function () {
-        Route::get('sales', SalesReport::class)->name('reports.sales')->middleware('can:reports.sales');
-        Route::get('purchases', PurchasesReport::class)->name('reports.purchases')->middleware(['can:reports.purchases', 'module:module_purchases']);
-        Route::get('accounts-receivable', AccountsReceivableReport::class)->name('reports.accounts.receivable')->middleware(['can:reports.financial', 'module:module_credits']);
-        Route::get('debit-notes', \App\Livewire\DebitNotes::class)->name('pos.debit-notes')->middleware(['can:manage_debit_notes', 'module:module_credits']);
-        Route::get('accounts-receivable/pdf', [\App\Http\Controllers\ReportController::class, 'accountsReceivablePdf'])->name('reports.accounts.receivable.pdf')->middleware(['can:reports.financial', 'module:module_credits']);
-        Route::get('accounts-payables', AccountsPayableReport::class)->name('reports.accounts.payables')->middleware(['can:reports.financial', 'module:module_purchases']);
-        Route::get('payment-relationship', \App\Livewire\Reports\PaymentRelationshipReport::class)->name('reports.payment.relationship')->middleware(['can:reports.sales', 'module:module_credits']);
-        Route::get('collection-relationship/{sheet}/pdf', [\App\Http\Controllers\ReportController::class, 'collectionRelationshipPdf'])->name('reports.collection.relationship.pdf');
-        Route::get('customer-statement/pdf', [\App\Http\Controllers\ReportController::class, 'customerStatementPdf'])->name('reports.customer.statement.pdf');
-        Route::get('daily-sales', \App\Livewire\Reports\DailySalesReport::class)->name('reports.daily.sales')->middleware('can:reports.sales');
-        Route::get('daily-sales/pdf', [\App\Http\Controllers\ReportController::class, 'dailySalesPdf'])->name('reports.daily.sales.pdf');
-        Route::get('sales/pdf', [\App\Http\Controllers\ReportController::class, 'generalSalesPdf'])->name('reports.general.sales.pdf');
-        Route::get('customers', \App\Livewire\Reports\CustomerReport::class)->name('reports.customers')->middleware(['can:reports.sales', 'module:module_customer_report']);
-        Route::get('customers/pdf', [\App\Http\Controllers\ReportController::class, 'customersPdf'])->name('reports.customers.pdf')->middleware(['can:reports.sales', 'module:module_customer_report']);
-        Route::get('customers/tracking-pdf', [\App\Http\Controllers\ReportController::class, 'customersTrackingPdf'])->name('reports.customers.tracking.pdf')->middleware(['can:reports.sales', 'module:module_customer_report']);
-        Route::get('customers/recovery-pdf', [\App\Http\Controllers\ReportController::class, 'customersRecoveryPdf'])->name('reports.customers.recovery.pdf')->middleware(['can:reports.sales', 'module:module_customer_report']);
-        Route::get('customer-activity', \App\Livewire\Reports\CustomerActivityReport::class)->name('reports.customer.activity')->middleware(['can:reports.sales', 'module:module_customer_activity']);
-        Route::get('customer-activity/pdf', [\App\Http\Controllers\ReportController::class, 'customerActivityPdf'])->name('reports.customer.activity.pdf')->middleware(['can:reports.sales', 'module:module_customer_activity']);
-        Route::get('sales-analysis', \App\Livewire\Reports\SalesAnalysisReport::class)->name('reports.sales.analysis')->middleware(['can:reports.sales', 'module:module_sales_analysis']);
-        Route::get('sales-analysis/pdf', [\App\Http\Controllers\ReportController::class, 'salesAnalysisPdf'])->name('reports.sales.analysis.pdf')->middleware(['can:reports.sales', 'module:module_sales_analysis']);
-        Route::get('sellers-performance', \App\Livewire\Reports\SellersPerformanceReport::class)->name('reports.sellers.performance')->middleware(['can:reports.sales', 'module:module_seller_performance']);
-        Route::get('sellers-performance/pdf', [\App\Http\Controllers\ReportController::class, 'sellersPerformancePdf'])->name('reports.sellers.performance.pdf')->middleware(['can:reports.sales', 'module:module_seller_performance']);
-        Route::get('goal-commissions', \App\Livewire\Reports\GoalCommissionReport::class)->name('reports.goal.commissions')->middleware('can:reports.sales');
-        Route::get('seller-grouped', \App\Livewire\Reports\SellerGroupedReport::class)->name('reports.seller_grouped')->middleware(['can:reports.sales', 'module:module_seller_grouped']);
-        Route::get('seller-grouped/pdf', [\App\Http\Controllers\ReportController::class, 'sellerGroupedPdf'])->name('reports.seller_grouped.pdf')->middleware(['can:reports.sales', 'module:module_seller_grouped']);
-        Route::get('operators-precision', \App\Livewire\Reports\BillingOperatorsReport::class)->name('reports.operators.precision')->middleware(['can:reports.sales', 'module:module_operator_efficiency']);
-        Route::get('operators-precision/pdf', [\App\Http\Controllers\ReportController::class, 'billingOperatorsPdf'])->name('reports.operators.precision.pdf')->middleware(['can:reports.sales', 'module:module_operator_efficiency']);
-        Route::get('exchange-diff', \App\Livewire\Reports\ExchangeDiffReport::class)->name('reports.exchange.diff')->middleware(['can:reports.sales', 'module:module_differential_audit']);
-        Route::get('commissions', \App\Livewire\CommissionReport::class)->name('reports.commissions')->middleware(['can:reports.sales', 'module:module_commissions']); // reports.commissions?
-        Route::get('best-sellers', \App\Livewire\Reports\BestSellers::class)->name('reports.best.sellers')->middleware('can:reports.sales');
-        Route::get('rotation', \App\Livewire\Reports\RotationReport::class)->name('reports.rotation')->middleware(['can:reports.stock', 'module:module_advanced_reports']);
-        Route::get('dispatch', DispatchReport::class)->name('reports.dispatch')->middleware(['can:reports.sales', 'module:module_delivery']);
-        Route::get('dispatch/pdf', [\App\Http\Controllers\ReportController::class, 'dispatchPdf'])->name('reports.dispatch.pdf')->middleware(['can:reports.sales', 'module:module_delivery']);
-        Route::get('returns', \App\Livewire\Reports\ReturnsReport::class)->name('reports.returns')->middleware('can:reports.sales');
-        Route::get('settlement/pdf', [\App\Http\Controllers\ReportController::class, 'settlementPdf'])->name('reports.settlement.pdf')->middleware(['can:reports.sales', 'module:module_delivery']);
-        Route::get('purchases/{purchase}/pdf', [\App\Http\Controllers\PurchaseController::class, 'pdf'])->name('purchases.pdf')->middleware(['can:purchases.index', 'module:module_purchases']);
-        Route::get('reports/inventory', \App\Livewire\Reports\InventoryReport::class)->name('reports.inventory')->middleware(['can:reports.sales']);
-        Route::get('reports/inventory/pdf', [\App\Http\Controllers\ReportController::class, 'inventoryPdf'])->name('reports.inventory.pdf')->middleware(['can:reports.sales']);
-        Route::get('reports/movements', \App\Livewire\Reports\ProductMovementsReport::class)->name('reports.movements')->middleware(['can:reports.stock']);
-        Route::get('reports/movements/pdf', [\App\Http\Controllers\ReportController::class, 'productMovementsPdf'])->name('reports.product.movements.pdf')->middleware(['can:reports.stock']);
-        Route::get('reports/audit', \App\Livewire\Reports\AuditReport::class)->name('reports.audit')->middleware(['can:reports.audit']);
-        Route::get('customer-payment-relationship', \App\Livewire\Reports\CustomerPaymentRelationshipReport::class)->name('reports.customer.payment.relationship')->middleware(['can:reports.customer_payment_relationship', 'module:module_collection_audit']);
-        Route::get('customer-payment-relationship/pdf', [\App\Http\Controllers\ReportController::class, 'customerPaymentRelationshipPdf'])->name('reports.customer.payment.relationship.pdf')->middleware(['can:reports.customer_payment_relationship', 'module:module_collection_audit']);
-        Route::get('weekly-income', \App\Livewire\Reports\WeeklyIncomeReport::class)->name('reports.weekly.income')->middleware(['can:reports.sales', 'module:module_weekly_income']);
-        Route::get('weekly-income/pdf', [\App\Http\Controllers\ReportController::class, 'weeklyIncomeReportPdf'])->name('reports.weekly.income.pdf')->middleware(['can:reports.sales', 'module:module_weekly_income']);
-        Route::get('monthly-income', \App\Livewire\Reports\MonthlyIncomeReport::class)->name('reports.monthly.income')->middleware(['can:reports.sales', 'module:module_monthly_income']);
-        Route::get('monthly-income/pdf', [\App\Http\Controllers\ReportController::class, 'monthlyIncomeReportPdf'])->name('reports.monthly.income.pdf')->middleware(['can:reports.sales', 'module:module_monthly_income']);
-        Route::get('cash-flow-forecast', \App\Livewire\Reports\CashFlowForecastReport::class)->name('reports.cash.flow.forecast')->middleware(['can:reports.sales', 'module:module_cash_flow']);
-        Route::get('cash-flow-forecast/pdf', [\App\Http\Controllers\ReportController::class, 'cashFlowForecastPdf'])->name('reports.cash.flow.forecast.pdf')->middleware(['can:reports.sales', 'module:module_cash_flow']);
-        Route::get('strategic', \App\Livewire\Reports\StrategicDashboard::class)->name('reports.strategic')->middleware(['can:reports.sales', 'module:module_strategic_analysis']);
-    });
-
-    // Consultas
-    Route::get('consultation/zelle', \App\Livewire\Consultation\ZelleConsultation::class)->name('consultation.zelle')->middleware(['can:zelle_index', 'module:module_advanced_payments']);
-    Route::get('consultation/zelle/filtered/pdf', [\App\Http\Controllers\PaymentConsultationController::class, 'generateFilteredZellePdf'])->name('zelle.filtered.pdf')->middleware(['can:zelle_print_pdf', 'module:module_advanced_payments']);
-    Route::get('consultation/zelle/{id}/pdf', [\App\Http\Controllers\PaymentConsultationController::class, 'generateZellePdf'])->name('zelle.pdf')->middleware(['can:zelle_print_pdf', 'module:module_advanced_payments']);
-
-    Route::get('consultation/usdt', \App\Livewire\Consultation\UsdtConsultation::class)->name('consultation.usdt')->middleware(['module:module_usdt']);
-    Route::get('consultation/usdt/filtered/pdf', [\App\Http\Controllers\PaymentConsultationController::class, 'generateFilteredUsdtPdf'])->name('usdt.filtered.pdf')->middleware(['module:module_usdt']);
-    Route::get('consultation/usdt/{id}/pdf', [\App\Http\Controllers\PaymentConsultationController::class, 'generateUsdtPdf'])->name('usdt.pdf')->middleware(['module:module_usdt']);
-    
-    Route::get('consultation/bank', \App\Livewire\Consultation\BankConsultation::class)->name('consultation.bank')->middleware(['can:bank_index', 'module:module_advanced_payments']);
-    Route::get('consultation/bank/{id}/pdf', [\App\Http\Controllers\PaymentConsultationController::class, 'generateBankPdf'])->name('bank.pdf')->middleware(['can:bank_print_pdf', 'module:module_advanced_payments']);
-    Route::get('consultation/approvals', \App\Livewire\Consultation\ExchangeRateApprovalsDashboard::class)->name('consultation.approvals')->middleware(['can:payments.approve_custom_rate']);
-
-    //corte de caja
-    Route::get('cash-count', CashCount::class)->name('cash.count')->middleware('can:cash_register.close');
-    Route::get('cash-count/pdf', [\App\Http\Controllers\ReportController::class, 'cashCountPdf'])->name('reports.cash.count.pdf')->middleware('can:cash_register.close');
-    Route::get('cash-count/pdf/detailed', [\App\Http\Controllers\ReportController::class, 'cashCountDetailedPdf'])->name('reports.cash.count.detailed.pdf')->middleware('can:cash_register.close');
-    
-    // Historial Auth Créditos
-    Route::get('credit-auth-history', \App\Livewire\CreditAuthorizationsList::class)->name('credit.auth.history')->middleware(['can:cash_register.close', 'module:module_credit_auth_history']);
-
-    //settings
-    Route::get('settings', Settings::class)->name('settings')->middleware('can:settings.index');
-    Route::get('updates', \App\Livewire\Settings\UpdateSystem::class)->name('updates')->middleware(['role:Super Admin', 'module:module_updates']);
-    Route::get('system/logs/download', function() {
-        $path = storage_path('logs/laravel.log');
-        if (file_exists($path)) {
-            return response()->download($path, 'laravel_' . date('Y-m-d') . '.log');
-        }
-        abort(404, 'No se encontró el archivo de registro.');
-    })->name('system.logs.download')->middleware(['role:Super Admin', 'module:module_updates']);
-    Route::get('backups', \App\Livewire\Settings\Backups::class)->name('backups')->middleware(['role:Super Admin', 'module:module_backups']);
-    Route::get('backups/download/{fileName}', [\App\Http\Controllers\BackupController::class, 'download'])->name('backups.download')->middleware(['role:Super Admin', 'module:module_backups']);
-    Route::get('devices', \App\Livewire\Settings\DeviceManager::class)->name('devices')->middleware('role:Super Admin');
-    
-    // WhatsApp
-    Route::get('settings/whatsapp', \App\Livewire\Settings\WhatsappSettings::class)->name('settings.whatsapp')->middleware(['role:Super Admin', 'module:module_whatsapp']);
-    Route::get('settings/email', \App\Livewire\Settings\EmailSettings::class)->name('settings.email')->middleware(['role:Super Admin']);
-    Route::get('settings/whatsapp-outbox', \App\Livewire\Settings\WhatsappOutbox::class)->name('settings.whatsapp_outbox')->middleware(['role:Super Admin', 'module:module_whatsapp']);
-    Route::get('settings/email-outbox', \App\Livewire\Settings\EmailOutbox::class)->name('settings.email_outbox')->middleware(['role:Super Admin']);
-    Route::get('settings/license-generator', \App\Livewire\Settings\LicenseGenerator::class)->name('settings.license_generator')->middleware('role:Super Admin');
-    
-    Route::get('whatsapp/download-pdf/{msgId}', function($msgId) {
-        $msg = \App\Models\WhatsappMessage::findOrFail($msgId);
-        if ($msg->attachment_path && file_exists($msg->attachment_path)) {
-            return response()->file($msg->attachment_path);
-        }
-        abort(404, 'PDF no encontrado.');
-    })->name('whatsapp.download-pdf');
-
-    Route::get('email/download-pdf/{msgId}', function($msgId) {
-        $msg = \App\Models\EmailMessage::findOrFail($msgId);
-        if ($msg->attachment_path && file_exists($msg->attachment_path)) {
-            return response()->file($msg->attachment_path);
-        }
-        abort(404, 'PDF no encontrado.');
-    })->name('email.download-pdf');
-
-    // Delivery Routes
-    Route::get('driver/dashboard/{driverId?}', \App\Livewire\DriverDashboard::class)->name('driver.dashboard'); // Maybe add permission?
-    Route::get('delivery/tracking/{sale}', \App\Livewire\DeliveryTracking::class)->name('delivery.tracking')->middleware('can:sales.index');
-    Route::get('delivery/map', \App\Livewire\LiveDriverMap::class)->name('delivery.map')->middleware('can:sales.index');
-
-    //generate pdf invoices
-    Route::get('sales/{sale}', [Sales::class, 'generatePdfInvoice'])->name('pos.sales.generatePdfInvoice')->middleware('can:sales.pdf');
-    Route::get('sales/{sale}/original', [Sales::class, 'generatePdfInvoiceOriginal'])->name('pos.sales.generatePdfInvoiceOriginal')->middleware('can:sales.pdf');
-    Route::get('sales/{sale}/internal', [Sales::class, 'generatePdfInternalInvoice'])->name('pos.sales.generatePdfInternal')->middleware('can:sales.pdf');
-    Route::get('sales/{sale}/internal-original', [Sales::class, 'generatePdfInternalInvoiceOriginal'])->name('pos.sales.generatePdfInternalOriginal')->middleware('can:sales.pdf');
-    Route::get('returns/{saleReturn}/pdf', [Sales::class, 'generateCreditNotePdfEndpoint'])->name('pos.returns.generateCreditNotePdf')->middleware('can:sales.pdf');
-    //generate pdf orders invoices
-    Route::get('orders/{order}', [Sales::class, 'generatePdfOrderInvoice'])->name('pos.orders.generatePdfOrderInvoice')->middleware('can:sales.pdf');
-
-    // Price List Generator
-    Route::get('price-list', \App\Livewire\PriceListGenerator::class)->name('price-list.index')->middleware(['auth', 'can:sales.generate_price_list']);
-
-    // Collection Audit Routes
-    Route::get('audit/sheet', \App\Livewire\Audit\CollectionSheetAudit::class)->name('audit.sheet')->middleware(['can:collections.audit', 'module:module_collection_audit']);
-    Route::get('audit/sheet/{sheet}', \App\Livewire\Audit\CollectionSheetAudit::class)->name('audit.sheet.detail')->middleware(['can:collections.audit', 'module:module_collection_audit']);
-    Route::get('audit/invoices', \App\Livewire\Audit\InvoicesAuditList::class)->name('audit.invoices')->middleware(['can:collections.audit', 'module:module_invoice_audit']);
-
-    // Cash Register Routes
-    Route::get('cash-register/open', \App\Livewire\CashRegisterOpen::class)->name('cash-register.open')->middleware('can:cash_register.open');
-    Route::get('cash-register/close', \App\Livewire\CashRegister::class)->name('cash-register.close')->middleware('can:cash_register.close');
-});
-
-
-
-
-//provar event
-// Route::get('evento', function () {
-//     $users = \App\Models\User::all();
-//     event(new PrintEvent(json_encode($users)));
-//     return 'event ok';
-// });
-
-
-
-// Route::get('tester', Tester::class);
-
-
-Route::get('/access-denied', function () {
-    return view('errors.access-denied');
-})->name('access.denied');
-
-// System Update Routes
-Route::prefix('system')->name('system.')->group(function () {
-    Route::get('/upgrade-db', function () {
-        try {
-            $updater = app(\App\Services\UpdateService::class);
-            $updater->runMigrations();
-
-            // Create the AutoMigrate flag file so middleware doesn't re-trigger
-            $versionFile = base_path('version.txt');
-            if (\Illuminate\Support\Facades\File::exists($versionFile)) {
-                $currentVersion = trim(\Illuminate\Support\Facades\File::get($versionFile));
-                $flagFile = storage_path('framework/migrated_' . str_replace('.', '_', $currentVersion) . '.log');
-                \Illuminate\Support\Facades\File::put($flagFile, 'Migrated on: ' . now()->toDateTimeString());
-            }
-
-            \Illuminate\Support\Facades\Artisan::call('optimize:clear');
-            return redirect('/dashboard')->with('success', 'Base de datos actualizada correctamente.');
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('upgrade-db failed: ' . $e->getMessage());
-            return redirect('/dashboard')->with('error', 'La migración finalizó con advertencias: ' . $e->getMessage());
-        }
-    })->name('upgrade-db');
-
-    // JSBolsas (Administración de Fábrica de Bolsas) Web Routes
-    Route::prefix('fabrica-bolsas')->name('bag_factory.')->group(function () {
-        Route::get('/', [\App\Http\Controllers\BagFactoryWebController::class, 'index'])->name('index');
-        Route::post('/approve/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'approve'])->name('approve');
-        Route::post('/bulk-approve', [\App\Http\Controllers\BagFactoryWebController::class, 'bulkApprove'])->name('bulk_approve');
-        Route::post('/adjust/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'adjust'])->name('adjust');
-        Route::post('/reject/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'reject'])->name('reject');
-        Route::get('/ticket/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'ticket'])->name('ticket');
-    });
-});
-
-// JSBolsas Pro / Bag Factory Web Routes
-Route::middleware('auth')->group(function () {
-    Route::get('/scale', [\App\Http\Controllers\BagFactoryWebController::class, 'scaleAudit'])->name('scale.index');
-    Route::get('/bascula', [\App\Http\Controllers\BagFactoryWebController::class, 'scaleAudit'])->name('scale.index_alias');
-    Route::post('/scale/approve/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'approve'])->name('approve');
-    Route::post('/scale/bulk-approve', [\App\Http\Controllers\BagFactoryWebController::class, 'bulkApprove'])->name('bulk_approve');
-    Route::post('/scale/adjust/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'adjust'])->name('adjust');
-    Route::post('/scale/reject/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'reject'])->name('reject');
-
-    Route::get('/reports-fabrica', [\App\Http\Controllers\BagFactoryWebController::class, 'reportsIndex'])->name('reports.index');
-    Route::get('/reports', [\App\Http\Controllers\BagFactoryWebController::class, 'reportsIndex'])->name('reports.index_en');
-    Route::get('/reportes', [\App\Http\Controllers\BagFactoryWebController::class, 'reportsIndex'])->name('reports.index_es');
-    Route::get('/reports-fabrica/pdf', [\App\Http\Controllers\BagFactoryWebController::class, 'reportsPdf'])->name('reports.pdf');
-
-    Route::get('/formulas', [\App\Http\Controllers\BagFactoryWebController::class, 'formulasIndex'])->name('formulas.index');
-    Route::post('/formulas', [\App\Http\Controllers\BagFactoryWebController::class, 'formulasStore'])->name('formulas.store');
-    Route::post('/formulas/{id}/version', [\App\Http\Controllers\BagFactoryWebController::class, 'formulasNewVersion'])->name('formulas.new_version');
-
-    Route::get('/raw-materials', [\App\Http\Controllers\BagFactoryWebController::class, 'rawMaterialsIndex'])->name('raw_materials.index');
-    Route::get('/materias-primas', [\App\Http\Controllers\BagFactoryWebController::class, 'rawMaterialsIndex'])->name('raw_materials.index_alias');
-    Route::post('/raw-materials', [\App\Http\Controllers\BagFactoryWebController::class, 'rawMaterialsStore'])->name('raw_materials.store');
-    Route::post('/raw-materials/{id}/price', [\App\Http\Controllers\BagFactoryWebController::class, 'rawMaterialsUpdatePrice'])->name('raw_materials.update_price');
-
-    Route::get('/costs', [\App\Http\Controllers\BagFactoryWebController::class, 'costsIndex'])->name('costs.index');
-    Route::get('/costos', [\App\Http\Controllers\BagFactoryWebController::class, 'costsIndex'])->name('costs.index_alias');
-    Route::match(['post', 'put'], '/costs', [\App\Http\Controllers\BagFactoryWebController::class, 'costsUpdate'])->name('costs.update');
-    Route::match(['post', 'put'], '/products/{id}/technical', [\App\Http\Controllers\BagFactoryWebController::class, 'productsTechnicalUpdate'])->name('products.technical.update');
-
-    Route::get('/catalogo-bolsas', [\App\Http\Controllers\BagFactoryWebController::class, 'productsIndex'])->name('products.index');
-    Route::get('/catalogo', [\App\Http\Controllers\BagFactoryWebController::class, 'productsIndex'])->name('products.index_alias');
-    Route::post('/catalogo-bolsas', [\App\Http\Controllers\BagFactoryWebController::class, 'productsStore'])->name('products.store');
-    Route::put('/catalogo-bolsas/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'productsUpdate'])->name('products.update');
-    Route::delete('/catalogo-bolsas/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'productsDestroy'])->name('products.destroy');
-
-    Route::get('/usuarios-fabrica', [\App\Http\Controllers\BagFactoryWebController::class, 'usersIndex'])->name('users.index');
-    Route::get('/usuarios', [\App\Http\Controllers\BagFactoryWebController::class, 'usersIndex'])->name('users.index_alias');
-    Route::post('/usuarios-fabrica', [\App\Http\Controllers\BagFactoryWebController::class, 'usersStore'])->name('users.store');
-    Route::put('/usuarios-fabrica/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'usersUpdate'])->name('users.update');
-    Route::delete('/usuarios-fabrica/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'usersDestroy'])->name('users.destroy');
-
-    Route::get('/machines', [\App\Http\Controllers\BagFactoryWebController::class, 'machinesIndex'])->name('machines.index');
-    Route::get('/maquinas', [\App\Http\Controllers\BagFactoryWebController::class, 'machinesIndex'])->name('machines.index_alias');
-    Route::post('/machines', [\App\Http\Controllers\BagFactoryWebController::class, 'machinesStore'])->name('machines.store');
-    Route::delete('/machines/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'machinesDestroy'])->name('machines.destroy');
-
-    Route::get('/ticket/{id}', [\App\Http\Controllers\BagFactoryWebController::class, 'ticket'])->name('ticket');
+    // Ticket térmico de pesaje
+    Route::get('/ticket/{id}', [BagFactoryWebController::class, 'ticket'])->name('ticket');
 });
 
 require __DIR__ . '/auth.php';
-
-
-
-Route::get('/fix-driver-role', function () {
-    try {
-        // Create Role if not exists
-        if (!\Spatie\Permission\Models\Role::where('name', 'Driver')->exists()) {
-            \Spatie\Permission\Models\Role::create(['name' => 'Driver', 'guard_name' => 'web', 'level' => 10]);
-        }
-        
-        // Clear Cache
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-        
-        return "Rol 'Driver' creado y caché limpiada correctamente. <a href='/dashboard'>Volver al Dashboard</a>";
-    } catch (\Exception $e) {
-        return "Error: " . $e->getMessage();
-    }
-});
-
-Route::get('/fix-super-admin', function () {
-    try {
-        $user = \App\Models\User::where('email', 'jhosagid77@gmail.com')->first();
-        if (!$user) return "Usuario no encontrado";
-        
-        // Ensure Admin role exists
-        if (!\Spatie\Permission\Models\Role::where('name', 'Admin')->exists()) {
-            \Spatie\Permission\Models\Role::create(['name' => 'Admin', 'guard_name' => 'web', 'level' => 100]);
-        }
-        
-        $adminRole = \Spatie\Permission\Models\Role::where('name', 'Admin')->first();
-        $user->assignRole($adminRole);
-        
-        // Clear Cache
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-        
-        return "Rol Admin asignado a {$user->name} y caché limpiada. <a href='/dashboard'>Volver</a>";
-    } catch (\Exception $e) {
-        return "Error: " . $e->getMessage();
-    }
-});

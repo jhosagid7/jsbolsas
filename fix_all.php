@@ -1,1 +1,0 @@
-<?php require "vendor/autoload.php"; $app = require_once "bootstrap/app.php"; $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class); $kernel->bootstrap(); $customers = App\Models\Customer::all(); foreach($customers as $c) { App\Services\CustomerCreditScoringService::evaluate($c); } echo "Done";

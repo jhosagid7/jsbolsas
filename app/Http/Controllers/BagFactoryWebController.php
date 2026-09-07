@@ -51,7 +51,7 @@ class BagFactoryWebController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        return redirect()->route('login');
+        return redirect('/');
     }
 
     // ==================== DASHBOARD & RENDIMIENTO EN VIVO ====================
@@ -110,7 +110,11 @@ class BagFactoryWebController extends Controller
             'pending_review'  => BagProduction::where('status', 'pending_review')->count(),
             'approved_ready'  => BagProduction::where('status', 'approved')->whereNull('lifted_at')->count(),
             'active_shifts'   => (int)(clone $shiftCountQuery)->count(),
-            'total_operators' => User::where('role', 'like', '%operario%')->orWhere('role', 'like', '%operator%')->count() ?: User::count(),
+            'total_operators' => (\Illuminate\Support\Facades\Schema::hasColumn('users', 'role')
+                ? User::where('role', 'like', '%operario%')->orWhere('role', 'like', '%operator%')->count()
+                : (\Illuminate\Support\Facades\Schema::hasColumn('users', 'profile')
+                    ? User::where('profile', 'like', '%operario%')->orWhere('profile', 'like', '%operator%')->count()
+                    : User::count())) ?: User::count(),
         ];
 
         // 2. Turnos de la Jornada / Período
@@ -680,9 +684,11 @@ class BagFactoryWebController extends Controller
 
         if (!empty($qrQuery)) {
             $clinicalReport = BagProduction::with(['user', 'product.formula.currentVersion', 'shift.machine', 'reviewer'])
-                ->where('qr_code', $qrQuery)
-                ->orWhere('id', $qrQuery)
-                ->orWhere('sync_id', $qrQuery)
+                ->where(function ($q) use ($qrQuery) {
+                    $q->where('qr_code', $qrQuery)
+                      ->orWhere('id', $qrQuery)
+                      ->orWhere('sync_id', $qrQuery);
+                })
                 ->first();
         }
 

@@ -36,11 +36,74 @@
             </button>
         </div>
 
+        <form action="{{ route('dashboard') }}" method="GET" class="d-flex align-items-center gap-1">
+            @if(request('period'))
+                <input type="hidden" name="period" value="{{ request('period') }}">
+            @endif
+            @if(request('start_date'))
+                <input type="hidden" name="start_date" value="{{ request('start_date') }}">
+                <input type="hidden" name="end_date" value="{{ request('end_date') }}">
+            @endif
+            <select name="machine_id" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="this.form.submit()" style="min-width: 170px;">
+                <option value="">⚙️ Todas las Máquinas</option>
+                @foreach($allMachines as $m)
+                    <option value="{{ $m->id }}" {{ ($selectedMachine?->id ?? '') == $m->id ? 'selected' : '' }}>
+                        {{ $m->name }} ({{ $m->code }})
+                    </option>
+                @endforeach
+            </select>
+            @if($selectedMachine)
+                <a href="{{ route('dashboard', array_filter(['period' => request('period'), 'start_date' => request('start_date'), 'end_date' => request('end_date')])) }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtro máquina">
+                    <i class="bi bi-x"></i>
+                </a>
+            @endif
+        </form>
+
         <a href="{{ route('reports.index') }}" class="btn btn-outline-success btn-sm fw-bold">
             <i class="bi bi-journal-text me-1"></i> Reportes & PDF
         </a>
     </div>
 </div>
+
+@if($machineStats)
+<!-- Panel de Rendimiento de Máquina Seleccionada -->
+<div class="card-custom mb-4 border border-info border-opacity-50">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold text-info mb-0">
+            <i class="bi bi-cpu-fill text-info me-2"></i> {{ $machineStats['machine']->name }} ({{ $machineStats['machine']->code }}) &bull; EFICIENCIA DE TURNO
+        </h5>
+        <span class="badge bg-info text-dark font-monospace fw-bold px-3 py-1">
+            Eficiencia: {{ $machineStats['efficiency'] }}%
+        </span>
+    </div>
+    <div class="row g-3 text-center">
+        <div class="col-6 col-md-3">
+            <div class="bg-dark p-2 rounded border border-secondary border-opacity-25">
+                <small class="text-white-50 d-block">Peso Total</small>
+                <strong class="text-white fs-6">{{ number_format($machineStats['total_kg'], 2) }} Kg</strong>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="bg-dark p-2 rounded border border-secondary border-opacity-25">
+                <small class="text-white-50 d-block">Paquetes / Bultos</small>
+                <strong class="text-white fs-6">{{ number_format($machineStats['total_packages'], 0) }} unids.</strong>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="bg-dark p-2 rounded border border-secondary border-opacity-25">
+                <small class="text-white-50 d-block">Horas Estimadas</small>
+                <strong class="text-white fs-6">{{ $machineStats['estimated_hours'] }} hrs</strong>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="bg-dark p-2 rounded border border-secondary border-opacity-25">
+                <small class="text-white-50 d-block">Jornadas / Turnos</small>
+                <strong class="text-white fs-6">{{ $machineStats['shifts_count'] }}</strong>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 
 <!-- Modal para Rango de Fechas Personalizado -->
 <div class="modal fade" id="customRangeModal" tabindex="-1" aria-labelledby="customRangeModalLabel" aria-hidden="true">

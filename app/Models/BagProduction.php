@@ -74,11 +74,6 @@ class BagProduction extends Model
         return $this->belongsTo(User::class, 'lifted_by');
     }
 
-    public function jsposProduction(): BelongsTo
-    {
-        return $this->belongsTo(Production::class, 'jspos_production_id');
-    }
-
     public function product(): BelongsTo
     {
         return $this->belongsTo(BagProduct::class, 'product_id');

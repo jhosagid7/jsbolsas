@@ -11,7 +11,7 @@ class AppTitleTest extends TestCase
     {
         $rawVer = file_exists(base_path('version.txt')) ? trim(file_get_contents(base_path('version.txt'))) : '1.0';
         $expectedVer = 'v' . ltrim($rawVer, 'v');
-        $expectedTitle = 'JSPOS ' . $expectedVer;
+        $expectedTitle = 'JSBolsas Pro ' . $expectedVer;
 
         $this->assertEquals($expectedTitle, config('app.name'));
     }

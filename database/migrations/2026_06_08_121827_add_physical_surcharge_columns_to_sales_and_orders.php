@@ -85,7 +85,7 @@ return new class extends Migration
         // 5. Backfill historical Orders data in chunks
         // Eager-loading simulation on raw DB queries is manual. We will query Order model directly but inside try-catch to avoid potential issues.
         try {
-            \App\Models\Order::orderBy('id')->chunk(100, function ($orders) {
+            DB::table('orders')->orderBy('id')->chunk(100, function ($orders) {
                 foreach ($orders as $order) {
                     // Calculate base_amount from order_details
                     $baseAmount = DB::table('order_details')
@@ -110,7 +110,7 @@ return new class extends Migration
                     ]);
                 }
             });
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Log it but don't break migration if models aren't bootstrapped
             \Illuminate\Support\Facades\Log::warning("Order backfill error during migration: " . $e->getMessage());
         }
