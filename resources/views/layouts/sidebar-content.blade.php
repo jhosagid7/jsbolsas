@@ -5,7 +5,7 @@
         <h5 class="fw-bold mb-0 text-white">JSBolsas <span class="text-info">Pro</span></h5>
         <div class="d-flex align-items-center gap-1 mt-1">
             <small class="text-white-50" style="font-size: 10px;">Plásticos M&F Steel</small>
-            <span class="badge bg-warning text-dark font-monospace" style="font-size: 9px; padding: 2px 5px;">v2.3.0</span>
+            <span class="badge bg-warning text-dark font-monospace" style="font-size: 9px; padding: 2px 5px;">{{ $systemVersion ?? 'v1.0.0' }}</span>
         </div>
     </div>
 </div>
@@ -13,7 +13,7 @@
 <!-- Descargar APK Móvil -->
 <div class="mb-3 px-1">
     <a href="/JSBolsas.apk" class="btn btn-outline-info btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-2 py-2" style="border-radius: 10px;">
-        <i class="bi bi-android2 fs-5"></i> Descargar APK Móvil <span class="badge bg-info text-dark">v2.3.0</span>
+        <i class="bi bi-android2 fs-5"></i> Descargar APK Móvil <span class="badge bg-info text-dark">{{ $systemVersion ?? 'v1.0.0' }}</span>
     </a>
 </div>
 
