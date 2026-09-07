@@ -76,3 +76,6 @@ plan_modulos_saas.md
 GUIA_*.md
 INSTALLATION_GUIDE.md
 *.exe
+*.sql
+*.dump
+*.bak
