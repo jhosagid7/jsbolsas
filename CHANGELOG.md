@@ -1,3 +1,46 @@
+# Changelog - JSBolsas Pro
+
+Todos los cambios notables de este proyecto se documentarán en este archivo.
+
+## [2.3.0] - 2026-09-07 (Primer Release Oficial - JSBolsas Pro)
+
+### Added
+- **Módulo de Control de Planta & Finanzas en Vivo**:
+  - Dashboard interactivo con cálculo en tiempo real de kilos producidos, bultos y rollos procesados.
+  - Balance financiero en vivo: Ingresos de planta, costo fijo operacional por turno, costo de resina y utilidad neta acumulada.
+  - Filtros dinámicos por jornada (Hoy, Esta Semana, Este Mes y Rango Libre).
+  - Medidor de meta de utilidad diaria (Target $105.00/día) con porcentaje alcanzado y margen de ganancia real.
+
+- **Módulo de Auditoría en Báscula & Control de Calidad**:
+  - Inspección de bultos y bobinas individuales con pesaje real vs teórico.
+  - Aprobación individual y por lote para pre-levantamiento.
+  - Ajuste de peso en báscula y rechazo con notas de auditoría.
+  - Impresión de tickets térmicos con código QR de trazabilidad e identificación de máquina/operario.
+
+- **Módulo de Costos de Producción & Simulador de Precios**:
+  - Simulación financiera multinivel automática: Precio Fábrica, Distribuidor (+10%), Mayorista (+17%) y Minorista (+21%).
+  - Parámetros financieros globales de fábrica: Costo base de resina ($/kg), costo fijo por turno y meta de ganancia diaria.
+  - Soporte completo para Modo Bobina (Peso variable en KG) y bolsas por millar/bulto.
+  - Ficha técnica completa con dimensiones (ancho, largo, calibre, fuelle) y cálculo de peso físico exacto.
+
+- **Módulo de Fórmulas de Mezcla & Materias Primas**:
+  - Control de fórmulas y recetas con sistema de versionado.
+  - Dosificación porcentual de componentes: Resina Virgen (LDPE/HDPE), Resina Reciclada, Pigmentos Masterbatch y Aditivos.
+  - Catálogo de materias primas con trazabilidad de historial de precios de compra.
+  - Cálculo automático del costo ponderado por kilogramo de mezcla ($/KG).
+
+- **Módulo de Administración & Máquinas de Planta**:
+  - Catálogo técnico de 240 productos y bobinas.
+  - Catálogo de máquinas y líneas de producción: Extrusoras, selladoras y cortadoras con código único.
+  - Gestión de usuarios y control de accesos por roles (Super Admin, Administrador, Jefe de Operaciones, Operario de Planta y Almacén).
+
+- **App Móvil de Operarios (Flutter / Android)**:
+  - App móvil dedicada `mobile_bolsas_app` (`JSBolsas.apk`) con versión sincronizada `v2.3.0`.
+  - Apertura y cierre de turnos con código único trazable.
+  - Registro y pesaje en báscula con sincronización offline/online a la API REST `/api/bag-factory/*`.
+
+---
+
 ## [1.10.419] - 2026-08-30
 
 ### Changed
