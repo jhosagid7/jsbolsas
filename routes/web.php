@@ -87,8 +87,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/machines', [BagFactoryWebController::class, 'machinesStore'])->name('machines.store');
     Route::delete('/machines/{id}', [BagFactoryWebController::class, 'machinesDestroy'])->name('machines.destroy');
 
-    // Ticket térmico de pesaje
+    // Ticket térmico de pesaje y etiquetas
     Route::get('/ticket/{id}', [BagFactoryWebController::class, 'ticket'])->name('ticket');
+    Route::get('/ticket/shift/{shift_id}', [BagFactoryWebController::class, 'printShiftLabels'])->name('ticket.shift');
+    Route::get('/ticket/batch/print', [BagFactoryWebController::class, 'printBatchLabels'])->name('ticket.batch');
 });
 
 require __DIR__ . '/auth.php';

@@ -415,11 +415,52 @@ class BagFactoryApiController extends Controller
     }
 
     /**
-     * Approve single production for Pre-Stock.
+     * Approve single production for Pre-Stock (with auto-split for multi-package homogenous items).
      */
     public function approveProduction(Request $request, $id)
     {
-        $prod = BagProduction::findOrFail($id);
+        $prod = BagProduction::with(['product', 'user', 'shift.user'])->findOrFail($id);
+
+        if ($prod->product && !$prod->product->is_variable_quantity && $prod->quantity > 1) {
+            $totalQty = (int)$prod->quantity;
+            $totalWeight = (float)$prod->weight;
+            $weightPerUnit = round($totalWeight / $totalQty, 2);
+            $createdIds = [];
+
+            DB::beginTransaction();
+            try {
+                for ($i = 0; $i < $totalQty; $i++) {
+                    $newProd = $prod->replicate();
+                    $newProd->quantity = 1.0;
+                    $newProd->weight = $weightPerUnit;
+                    $newProd->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                    $newProd->status = 'approved';
+                    $newProd->reviewed_at = now();
+                    $newProd->reviewed_by = auth()->id();
+                    $newProd->sync_id = 'PROD-SPLIT-' . Str::uuid();
+                    $newProd->save();
+                    $createdIds[] = $newProd->id;
+                }
+                $prod->delete();
+                DB::commit();
+
+                $firstCreated = BagProduction::with(['product', 'user', 'reviewer'])->find($createdIds[0] ?? null);
+
+                return response()->json([
+                    'success'       => true,
+                    'message'       => "Lote dividido y aprobado en {$totalQty} bultos individuales",
+                    'is_split'      => true,
+                    'split_count'   => $totalQty,
+                    'data'          => $firstCreated,
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error al dividir lote de bultos: ' . $e->getMessage(),
+                ], 500);
+            }
+        }
 
         if (empty($prod->qr_code)) {
             $prod->qr_code = 'PKG-' . strtoupper(Str::random(10));
@@ -439,7 +480,7 @@ class BagFactoryApiController extends Controller
     }
 
     /**
-     * Bulk approve multiple productions.
+     * Bulk approve multiple productions (with auto-split support).
      */
     public function bulkApprove(Request $request)
     {
@@ -451,16 +492,35 @@ class BagFactoryApiController extends Controller
         $count = 0;
         DB::transaction(function () use ($request, &$count) {
             foreach ($request->production_ids as $id) {
-                $prod = BagProduction::find($id);
+                $prod = BagProduction::with(['product'])->find($id);
                 if ($prod && $prod->status !== 'approved') {
-                    if (empty($prod->qr_code)) {
-                        $prod->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                    if ($prod->product && !$prod->product->is_variable_quantity && $prod->quantity > 1) {
+                        $totalQty = (int)$prod->quantity;
+                        $totalWeight = (float)$prod->weight;
+                        $weightPerUnit = round($totalWeight / $totalQty, 2);
+                        for ($i = 0; $i < $totalQty; $i++) {
+                            $newProd = $prod->replicate();
+                            $newProd->quantity = 1.0;
+                            $newProd->weight = $weightPerUnit;
+                            $newProd->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                            $newProd->status = 'approved';
+                            $newProd->reviewed_at = now();
+                            $newProd->reviewed_by = auth()->id();
+                            $newProd->sync_id = 'PROD-SPLIT-' . Str::uuid();
+                            $newProd->save();
+                            $count++;
+                        }
+                        $prod->delete();
+                    } else {
+                        if (empty($prod->qr_code)) {
+                            $prod->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                        }
+                        $prod->status = 'approved';
+                        $prod->reviewed_by = auth()->id();
+                        $prod->reviewed_at = now();
+                        $prod->save();
+                        $count++;
                     }
-                    $prod->status = 'approved';
-                    $prod->reviewed_by = auth()->id();
-                    $prod->reviewed_at = now();
-                    $prod->save();
-                    $count++;
                 }
             }
         });

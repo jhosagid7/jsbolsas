@@ -395,10 +395,15 @@
 
 <!-- Aprobados Recientes (Pre-Levantamiento) -->
 <div class="card-custom">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h5 class="fw-bold text-success mb-0">
             <i class="bi bi-qr-code-scan me-2"></i> Stock Aprobado en Pre-Levantamiento (Listo para Almacén General)
         </h5>
+        @if($recentApproved->isNotEmpty())
+            <a href="{{ route('ticket.batch', ['ids' => $recentApproved->pluck('id')->implode(',')]) }}" target="_blank" class="btn btn-outline-success btn-sm fw-bold">
+                <i class="bi bi-printer me-1"></i> 🖨️ Imprimir Todas las Etiquetas ({{ $recentApproved->count() }})
+            </a>
+        @endif
     </div>
 
     @if($recentApproved->isEmpty())

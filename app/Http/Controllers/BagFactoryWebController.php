@@ -15,6 +15,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -712,7 +713,38 @@ class BagFactoryWebController extends Controller
 
     public function approve($id)
     {
-        $prod = BagProduction::findOrFail($id);
+        $prod = BagProduction::with(['product', 'shift.user'])->findOrFail($id);
+
+        // Si es un producto con bultos u homogéneo y la cantidad es mayor a 1
+        if ($prod->product && !$prod->product->is_variable_quantity && $prod->quantity > 1) {
+            $totalQty = (int)$prod->quantity;
+            $totalWeight = (float)$prod->weight;
+            $weightPerUnit = round($totalWeight / $totalQty, 2);
+
+            DB::beginTransaction();
+            try {
+                for ($i = 0; $i < $totalQty; $i++) {
+                    $newProd = $prod->replicate();
+                    $newProd->quantity = 1.0;
+                    $newProd->weight = $weightPerUnit;
+                    $newProd->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                    $newProd->status = 'approved';
+                    $newProd->reviewed_at = now();
+                    $newProd->reviewed_by = auth()->id();
+                    $newProd->sync_id = 'PROD-SPLIT-' . Str::uuid();
+                    $newProd->save();
+                }
+                $prod->delete();
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return back()->with('error', 'Error al dividir registros: ' . $e->getMessage());
+            }
+
+            return back()->with('status', "Lote dividido y aprobado en {$totalQty} bultos individuales con éxito.");
+        }
+
+        // Lógica estándar para cantidad = 1 o Bobina Variable
         if (empty($prod->qr_code)) {
             $prod->qr_code = 'PKG-' . strtoupper(Str::random(10));
         }
@@ -730,20 +762,43 @@ class BagFactoryWebController extends Controller
     {
         $request->validate(['ids' => 'required|array|min:1']);
         $count = 0;
-        foreach ($request->ids as $id) {
-            $prod = BagProduction::find($id);
-            if ($prod && $prod->status !== 'approved') {
-                if (empty($prod->qr_code)) {
-                    $prod->qr_code = 'PKG-' . strtoupper(Str::random(10));
+
+        DB::transaction(function () use ($request, &$count) {
+            foreach ($request->ids as $id) {
+                $prod = BagProduction::with(['product', 'shift.user'])->find($id);
+                if ($prod && $prod->status !== 'approved') {
+                    if ($prod->product && !$prod->product->is_variable_quantity && $prod->quantity > 1) {
+                        $totalQty = (int)$prod->quantity;
+                        $totalWeight = (float)$prod->weight;
+                        $weightPerUnit = round($totalWeight / $totalQty, 2);
+                        for ($i = 0; $i < $totalQty; $i++) {
+                            $newProd = $prod->replicate();
+                            $newProd->quantity = 1.0;
+                            $newProd->weight = $weightPerUnit;
+                            $newProd->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                            $newProd->status = 'approved';
+                            $newProd->reviewed_at = now();
+                            $newProd->reviewed_by = auth()->id();
+                            $newProd->sync_id = 'PROD-SPLIT-' . Str::uuid();
+                            $newProd->save();
+                            $count++;
+                        }
+                        $prod->delete();
+                    } else {
+                        if (empty($prod->qr_code)) {
+                            $prod->qr_code = 'PKG-' . strtoupper(Str::random(10));
+                        }
+                        $prod->status = 'approved';
+                        $prod->reviewed_by = auth()->id();
+                        $prod->reviewed_at = now();
+                        $prod->save();
+                        $count++;
+                    }
                 }
-                $prod->status = 'approved';
-                $prod->reviewed_by = auth()->id();
-                $prod->reviewed_at = now();
-                $prod->save();
-                $count++;
             }
-        }
-        return back()->with('status', "Se aprobaron {$count} registros para Pre-Levantamiento.");
+        });
+
+        return back()->with('status', "Se aprobaron {$count} bultos para Pre-Levantamiento.");
     }
 
     public function adjust(Request $request, $id)
@@ -834,8 +889,59 @@ class BagFactoryWebController extends Controller
 
     public function ticket($id)
     {
-        $prod = BagProduction::with(['user', 'product', 'shift.machine', 'reviewer'])->findOrFail($id);
-        return view('bag_factory.ticket', compact('prod'));
+        $prod = BagProduction::with(['user', 'product', 'shift.user', 'reviewer'])->findOrFail($id);
+        $labels = [$this->formatLabelData($prod)];
+        return view('bag_factory.ticket', compact('labels'));
+    }
+
+    public function printShiftLabels($shift_id)
+    {
+        $productions = BagProduction::where('bag_shift_id', $shift_id)
+            ->where('status', 'approved')
+            ->with(['user', 'product', 'shift.user', 'reviewer'])
+            ->orderBy('recorded_at', 'asc')
+            ->get();
+
+        $labels = $productions->map(fn($p) => $this->formatLabelData($p))->toArray();
+        return view('bag_factory.ticket', compact('labels'));
+    }
+
+    public function printBatchLabels(Request $request)
+    {
+        $ids = $request->get('ids', []);
+        if (is_string($ids)) {
+            $ids = array_filter(explode(',', $ids));
+        }
+
+        $productions = BagProduction::whereIn('id', $ids)
+            ->where('status', 'approved')
+            ->with(['user', 'product', 'shift.user', 'reviewer'])
+            ->orderBy('recorded_at', 'asc')
+            ->get();
+
+        $labels = $productions->map(fn($p) => $this->formatLabelData($p))->toArray();
+        return view('bag_factory.ticket', compact('labels'));
+    }
+
+    protected function formatLabelData(BagProduction $prod): array
+    {
+        $isVariable = (bool)($prod->product?->is_variable_quantity);
+        $saleUnit = strtoupper($prod->product?->sale_unit ?? 'BULTO');
+        $presentation = $isVariable ? 'BOBINA - PESO VARIABLE' : "1 {$saleUnit}";
+
+        return [
+            'id'                => $prod->id,
+            'product_name'      => mb_strtoupper($prod->product?->name ?? 'PRODUCTO', 'UTF-8'),
+            'presentation_info' => $presentation,
+            'operator_name'     => $prod->shift?->user?->name ?? $prod->user?->name ?? 'Operador Planta',
+            'production_date'   => $prod->recorded_at ? $prod->recorded_at->format('d/m/Y') : ($prod->created_at ? $prod->created_at->format('d/m/Y') : date('d/m/Y')),
+            'approver_name'     => $prod->reviewer?->name ?? (Auth::user()?->name ?? 'Supervisor'),
+            'is_variable'       => $isVariable,
+            'weight_kg'         => (float)$prod->weight,
+            'batch_code'        => 'LOTE-' . ($prod->shift?->id ?? $prod->bag_shift_id ?? '01'),
+            'qr_code'           => $prod->qr_code ?? ('PKG-' . strtoupper(Str::random(10))),
+            'sku'               => $prod->product?->sku ?? 'S/SKU',
+        ];
     }
 
     // ==================== REPORTES HISTÓRICOS ====================

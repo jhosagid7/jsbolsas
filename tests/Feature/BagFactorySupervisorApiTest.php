@@ -117,8 +117,8 @@ class BagFactorySupervisorApiTest extends TestCase
             'bag_shift_id' => $this->shift->id,
             'user_id'      => $this->operator->id,
             'product_id'   => $this->product->id,
-            'quantity'     => 2,
-            'weight'       => 40.0000,
+            'quantity'     => 1,
+            'weight'       => 20.0000,
             'recorded_at'  => now(),
             'status'       => 'pending_review',
         ]);
