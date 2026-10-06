@@ -260,7 +260,7 @@
                 <span style="font-size: 24px;">🏭</span>
                 <div>
                     <h6 class="fw-bold mb-0 text-white line-height-1">JSBolsas <span class="text-info">Pro</span></h6>
-                    <small class="text-white-50" style="font-size: 9.5px;">M&F Steel • v2.3.0</small>
+                    <small class="text-white-50" style="font-size: 9.5px;">M&F Steel • {{ $systemVersion ?? 'v2.3.1' }}</small>
                 </div>
             </div>
         </div>

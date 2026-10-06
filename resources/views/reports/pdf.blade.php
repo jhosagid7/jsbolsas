@@ -194,15 +194,26 @@
                                 <br><span style="font-size: 8px; color: #64748b;">SKU: {{ $p->product->sku }}</span>
                             @endif
                             @if(!empty($p->metadata) && is_array($p->metadata))
-                                <ul class="rolls-list">
-                                    @foreach($p->metadata as $idx => $r)
-                                        <li>
-                                            Rollo #{{ $idx + 1 }}: <strong>{{ $r['weight'] ?? 0 }} Kg</strong>
-                                            @if(!empty($r['color'])) | Color: {{ $r['color'] }} @endif
-                                            @if(!empty($r['batch'])) | Lote: {{ $r['batch'] }} @endif
-                                        </li>
-                                    @endforeach
-                                </ul>
+                                @php
+                                    $pPdfRolls = isset($p->metadata['rolls']) && is_array($p->metadata['rolls'])
+                                        ? $p->metadata['rolls']
+                                        : (isset($p->metadata['roll']) && is_array($p->metadata['roll'])
+                                            ? [$p->metadata['roll']]
+                                            : (is_array($p->metadata) ? $p->metadata : []));
+                                @endphp
+                                @if(count($pPdfRolls) > 0)
+                                    <ul class="rolls-list">
+                                        @foreach($pPdfRolls as $r)
+                                            @if(is_array($r))
+                                                <li>
+                                                    Rollo #{{ $loop->iteration }}: <strong>{{ $r['weight'] ?? 0 }} Kg</strong>
+                                                    @if(!empty($r['color'])) | Color: {{ $r['color'] }} @endif
+                                                    @if(!empty($r['batch'])) | Lote: {{ $r['batch'] }} @endif
+                                                </li>
+                                            @endif
+                                        @endforeach
+                                    </ul>
+                                @endif
                             @endif
                         </td>
                         <td class="text-center">

@@ -40,7 +40,7 @@
         <div class="col-md-3">
             <small class="text-white-50 d-block">Máquina / Línea:</small>
             <span class="fw-bold text-warning">
-                {{ $clinicalReport->machine->code ?? 'N/A' }} - {{ $clinicalReport->machine->name ?? 'N/A' }}
+                {{ $clinicalReport->effective_machine->code ?? 'N/A' }} - {{ $clinicalReport->effective_machine->name ?? 'N/A' }}
             </span>
         </div>
         <div class="col-md-3">
@@ -162,14 +162,23 @@
                             </td>
                             <td>
                                 @if($hasRolls)
+                                    @php
+                                        $rollsList = isset($prod->metadata['rolls']) && is_array($prod->metadata['rolls'])
+                                            ? $prod->metadata['rolls']
+                                            : (isset($prod->metadata['roll']) && is_array($prod->metadata['roll'])
+                                                ? [$prod->metadata['roll']]
+                                                : (is_array($prod->metadata) ? $prod->metadata : []));
+                                    @endphp
                                     <div class="d-flex flex-column gap-1">
-                                        @foreach($prod->metadata as $idx => $r)
-                                            <div class="p-1 px-2 bg-dark rounded border border-warning-subtle d-flex justify-content-between align-items-center" style="font-size: 11px;">
-                                                <span class="text-warning fw-bold"><i class="bi bi-disc me-1"></i> Bobina #{{ $idx + 1 }}:</span>
-                                                <strong class="text-white font-monospace">{{ number_format($r['weight'] ?? 0, 2) }} Kg</strong>
-                                                @if(!empty($r['color'])) <span class="badge bg-secondary" style="font-size: 9px;">{{ $r['color'] }}</span> @endif
-                                                @if(!empty($r['batch'])) <span class="text-white-50" style="font-size: 9px;">L:{{ $r['batch'] }}</span> @endif
-                                            </div>
+                                        @foreach($rollsList as $r)
+                                            @if(is_array($r))
+                                                <div class="p-1 px-2 bg-dark rounded border border-warning-subtle d-flex justify-content-between align-items-center" style="font-size: 11px;">
+                                                    <span class="text-warning fw-bold"><i class="bi bi-disc me-1"></i> Bobina #{{ $loop->iteration }}:</span>
+                                                    <strong class="text-white font-monospace">{{ number_format($r['weight'] ?? 0, 2) }} Kg</strong>
+                                                    @if(!empty($r['color'])) <span class="badge bg-secondary" style="font-size: 9px;">{{ $r['color'] }}</span> @endif
+                                                    @if(!empty($r['batch'])) <span class="text-white-50" style="font-size: 9px;">L:{{ $r['batch'] }}</span> @endif
+                                                </div>
+                                            @endif
                                         @endforeach
                                     </div>
                                 @elseif($isBobina)
@@ -291,25 +300,34 @@
                                     </thead>
                                     <tbody id="rollsBody{{ $prod->id }}">
                                         @if($hasRolls)
-                                            @foreach($prod->metadata as $idx => $r)
-                                                <tr class="roll-row-{{ $prod->id }}">
-                                                    <td class="text-warning fw-bold align-middle roll-num-{{ $prod->id }}">{{ $idx + 1 }}</td>
-                                                    <td>
-                                                        <div class="input-group input-group-sm">
-                                                            <input type="number" step="0.01" name="rolls[{{ $idx }}][weight]" class="form-control form-control-sm roll-weight-{{ $prod->id }} text-warning fw-bold fs-6" value="{{ $r['weight'] ?? '' }}" placeholder="0.00" required oninput="recalcTotals({{ $prod->id }})">
-                                                            <span class="input-group-text bg-secondary text-white">Kg</span>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <input type="text" name="rolls[{{ $idx }}][color]" class="form-control form-control-sm text-white" value="{{ $r['color'] ?? '' }}" placeholder="Color">
-                                                    </td>
-                                                    <td>
-                                                        <input type="text" name="rolls[{{ $idx }}][batch]" class="form-control form-control-sm text-white" value="{{ $r['batch'] ?? '' }}" placeholder="Lote">
-                                                    </td>
-                                                    <td>
-                                                        <button type="button" class="btn btn-outline-danger btn-sm py-0" onclick="removeRollRow(this, {{ $prod->id }})">🗑️</button>
-                                                    </td>
-                                                </tr>
+                                            @php
+                                                $modalRolls = isset($prod->metadata['rolls']) && is_array($prod->metadata['rolls'])
+                                                    ? $prod->metadata['rolls']
+                                                    : (isset($prod->metadata['roll']) && is_array($prod->metadata['roll'])
+                                                        ? [$prod->metadata['roll']]
+                                                        : (is_array($prod->metadata) ? $prod->metadata : []));
+                                            @endphp
+                                            @foreach($modalRolls as $r)
+                                                @if(is_array($r))
+                                                    <tr class="roll-row-{{ $prod->id }}">
+                                                        <td class="text-warning fw-bold align-middle roll-num-{{ $prod->id }}">{{ $loop->iteration }}</td>
+                                                        <td>
+                                                            <div class="input-group input-group-sm">
+                                                                <input type="number" step="0.01" name="rolls[{{ $loop->index }}][weight]" class="form-control form-control-sm roll-weight-{{ $prod->id }} text-warning fw-bold fs-6" value="{{ $r['weight'] ?? '' }}" placeholder="0.00" required oninput="recalcTotals({{ $prod->id }})">
+                                                                <span class="input-group-text bg-secondary text-white">Kg</span>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <input type="text" name="rolls[{{ $loop->index }}][color]" class="form-control form-control-sm text-white" value="{{ $r['color'] ?? '' }}" placeholder="Color">
+                                                        </td>
+                                                        <td>
+                                                            <input type="text" name="rolls[{{ $loop->index }}][batch]" class="form-control form-control-sm text-white" value="{{ $r['batch'] ?? '' }}" placeholder="Lote">
+                                                        </td>
+                                                        <td>
+                                                            <button type="button" class="btn btn-outline-danger btn-sm py-0" onclick="removeRollRow(this, {{ $prod->id }})">🗑️</button>
+                                                        </td>
+                                                    </tr>
+                                                @endif
                                             @endforeach
                                         @elseif($isBobina && (int)$prod->quantity > 0)
                                             @php
@@ -450,11 +468,22 @@
                             <td class="text-success fw-bold font-monospace fs-6">{{ number_format($item->weight, 2) }} Kg</td>
                             <td>
                                 @if($hasRolls)
+                                    @php
+                                        $itemRolls = isset($item->metadata['rolls']) && is_array($item->metadata['rolls'])
+                                            ? $item->metadata['rolls']
+                                            : (isset($item->metadata['roll']) && is_array($item->metadata['roll'])
+                                                ? [$item->metadata['roll']]
+                                                : (is_array($item->metadata) ? $item->metadata : []));
+                                    @endphp
                                     <div class="d-flex flex-column gap-1" style="font-size: 11px;">
-                                        @foreach($item->metadata as $idx => $r)
-                                            <span class="badge bg-dark border border-success text-success text-start py-1">
-                                                Bobina #{{ $idx + 1 }}: <strong class="text-white">{{ number_format($r['weight'] ?? 0, 2) }} Kg</strong>
-                                            </span>
+                                        @foreach($itemRolls as $r)
+                                            @if(is_array($r))
+                                                <span class="badge bg-dark border border-success text-success text-start py-1">
+                                                    Bobina #{{ $loop->iteration }}: <strong class="text-white">{{ number_format($r['weight'] ?? 0, 2) }} Kg</strong>
+                                                    @if(!empty($r['color'])) <span class="badge bg-secondary ms-1" style="font-size: 9px;">{{ $r['color'] }}</span> @endif
+                                                    @if(!empty($r['batch'])) <span class="text-white-50 ms-1" style="font-size: 9px;">L:{{ $r['batch'] }}</span> @endif
+                                                </span>
+                                            @endif
                                         @endforeach
                                     </div>
                                 @else

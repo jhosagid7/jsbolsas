@@ -17,53 +17,80 @@
     </a>
 </div>
 
-<!-- Módulos de Control de Planta -->
-<div class="mb-3">
-    <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">CONTROL DE PLANTA</small>
-    <div class="mt-2">
-        <a href="{{ route('dashboard') }}" class="nav-link-custom {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="bi bi-grid-fill text-info"></i> Monitor & Finanzas
-        </a>
-        <a href="{{ route('scale.index') }}" class="nav-link-custom {{ request()->routeIs('scale.index') ? 'active' : '' }}">
-            <i class="bi bi-speedometer2 text-warning"></i> Báscula & Auditoría
-        </a>
-        <a href="{{ route('reports.index') }}" class="nav-link-custom {{ request()->routeIs('reports.*') ? 'active' : '' }}">
-            <i class="bi bi-file-earmark-bar-graph-fill text-success"></i> Reportes por Día
-        </a>
+@if(Auth::check() && Auth::user()->isOperator())
+    <!-- Menú Exclusivo para Operario de Planta -->
+    <div class="mb-3">
+        <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">ESTACIÓN DE TRABAJO</small>
+        <div class="mt-2">
+            <a href="{{ route('operator.station') }}" class="nav-link-custom {{ request()->routeIs('operator.station*') ? 'active' : '' }}">
+                <i class="bi bi-speedometer2 text-warning"></i> Carga Rápida & Báscula
+            </a>
+            <a href="{{ route('labels.index') }}" class="nav-link-custom {{ request()->routeIs('labels.*') ? 'active' : '' }}">
+                <i class="bi bi-tag-fill text-primary"></i> Impresión de Etiquetas
+            </a>
+        </div>
     </div>
-</div>
+@else
+    <!-- Módulos de Control de Planta (Administración & Supervisión) -->
+    <div class="mb-3">
+        <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">CONTROL DE PLANTA</small>
+        <div class="mt-2">
+            <a href="{{ route('dashboard') }}" class="nav-link-custom {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+                <i class="bi bi-grid-fill text-info"></i> Monitor & Finanzas
+            </a>
+            <a href="{{ route('operator.station') }}" class="nav-link-custom {{ request()->routeIs('operator.station*') ? 'active' : '' }}">
+                <i class="bi bi-speedometer2 text-warning"></i> Estación de Operarios
+            </a>
+            <a href="{{ route('scale.index') }}" class="nav-link-custom {{ request()->routeIs('scale.index') ? 'active' : '' }}">
+                <i class="bi bi-check2-circle text-info"></i> Báscula & Auditoría
+            </a>
+            <a href="{{ route('labels.index') }}" class="nav-link-custom {{ request()->routeIs('labels.*') ? 'active' : '' }}">
+                <i class="bi bi-tag-fill text-primary"></i> Generador de Etiquetas
+            </a>
+            <a href="{{ route('bag-factory.label-audits') }}" class="nav-link-custom {{ request()->routeIs('bag-factory.label-audits*') ? 'active' : '' }}">
+                <i class="bi bi-shield-check text-danger"></i> Auditoría de Etiquetas
+            </a>
+            <a href="{{ route('reports.index') }}" class="nav-link-custom {{ request()->routeIs('reports.*') ? 'active' : '' }}">
+                <i class="bi bi-file-earmark-bar-graph-fill text-success"></i> Reportes por Día
+            </a>
+            <a href="{{ route('bag-factory.payroll') }}" class="nav-link-custom {{ request()->routeIs('bag-factory.payroll*') || request()->routeIs('bag_factory.payroll*') ? 'active' : '' }}">
+                <i class="bi bi-cash-stack text-success"></i> Nómina & Metas
+            </a>
+        </div>
+    </div>
 
-<!-- Fórmulas y Costos -->
-<div class="mb-3">
-    <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">FÓRMULAS & MATERIA PRIMA</small>
-    <div class="mt-2">
-        <a href="{{ route('formulas.index') }}" class="nav-link-custom {{ request()->routeIs('formulas.*') ? 'active' : '' }}">
-            <i class="bi bi-bezier2 text-warning"></i> Fórmulas de Mezcla
-        </a>
-        <a href="{{ route('raw_materials.index') }}" class="nav-link-custom {{ request()->routeIs('raw_materials.*') ? 'active' : '' }}">
-            <i class="bi bi-boxes text-info"></i> Materias Primas
-        </a>
-        <a href="{{ route('costs.index') }}" class="nav-link-custom {{ request()->routeIs('costs.*') ? 'active' : '' }}">
-            <i class="bi bi-sliders text-success"></i> Costos & Precios
-        </a>
+    <!-- Fórmulas y Costos -->
+    <div class="mb-3">
+        <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">FÓRMULAS & MATERIA PRIMA</small>
+        <div class="mt-2">
+            <a href="{{ route('formulas.index') }}" class="nav-link-custom {{ request()->routeIs('formulas.*') ? 'active' : '' }}">
+                <i class="bi bi-bezier2 text-warning"></i> Fórmulas de Mezcla
+            </a>
+            <a href="{{ route('raw_materials.index') }}" class="nav-link-custom {{ request()->routeIs('raw_materials.*') ? 'active' : '' }}">
+                <i class="bi bi-boxes text-info"></i> Materias Primas
+            </a>
+            <a href="{{ route('costs.index') }}" class="nav-link-custom {{ request()->routeIs('costs.*') ? 'active' : '' }}">
+                <i class="bi bi-sliders text-success"></i> Costos & Precios
+            </a>
+        </div>
     </div>
-</div>
 
-<!-- Administración y Catálogo -->
-<div class="mb-4">
-    <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">ADMINISTRACIÓN</small>
-    <div class="mt-2">
-        <a href="{{ route('products.index') }}" class="nav-link-custom {{ request()->routeIs('products.*') ? 'active' : '' }}">
-            <i class="bi bi-box-seam-fill text-info"></i> Catálogo de Bolsas
-        </a>
-        <a href="{{ route('machines.index') }}" class="nav-link-custom {{ request()->routeIs('machines.*') ? 'active' : '' }}">
-            <i class="bi bi-gear-wide-connected text-primary"></i> Máquinas & Líneas
-        </a>
-        <a href="{{ route('users.index') }}" class="nav-link-custom {{ request()->routeIs('users.*') ? 'active' : '' }}">
-            <i class="bi bi-people-fill text-warning"></i> Usuarios & Roles (APK)
-        </a>
+    <!-- Administración y Catálogo -->
+    <div class="mb-4">
+        <small class="text-uppercase text-secondary fw-bold px-2" style="font-size: 10px; letter-spacing: 0.5px;">ADMINISTRACIÓN</small>
+        <div class="mt-2">
+            <a href="{{ route('products.index') }}" class="nav-link-custom {{ request()->routeIs('products.*') ? 'active' : '' }}">
+                <i class="bi bi-box-seam-fill text-info"></i> Catálogo de Bolsas
+            </a>
+            <a href="{{ route('machines.index') }}" class="nav-link-custom {{ request()->routeIs('machines.*') ? 'active' : '' }}">
+                <i class="bi bi-gear-wide-connected text-primary"></i> Máquinas & Líneas
+            </a>
+            <a href="{{ route('users.index') }}" class="nav-link-custom {{ request()->routeIs('users.*') ? 'active' : '' }}">
+                <i class="bi bi-people-fill text-warning"></i> Usuarios & Roles (APK)
+            </a>
+        </div>
     </div>
-</div>
+@endif
 
 <!-- Perfil de Usuario y Cierre de Sesión al Fondo -->
 <div class="mt-auto pt-3 border-top border-secondary-subtle">

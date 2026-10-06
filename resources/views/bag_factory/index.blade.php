@@ -87,7 +87,7 @@
                             <tbody>
                                 @foreach($activeShifts as $shift)
                                     <tr>
-                                        <td class="font-weight-bold">{{ $shift->user->name ?? 'Operario' }}</td>
+                                        <td class="font-weight-bold">{{ $shift->effective_user->name ?? $shift->user->name ?? 'Operario' }}</td>
                                         <td>
                                             @if($shift->shift_type === 'diurno')
                                                 <span class="badge badge-primary">☀️ Diurno</span>

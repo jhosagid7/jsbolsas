@@ -209,15 +209,27 @@
 
                                     <!-- Desglose de Bobinas / Rollos -->
                                     @if(!empty($p->metadata) && is_array($p->metadata))
-                                        <div class="mt-1 p-2 bg-dark rounded border border-secondary" style="font-size: 0.75rem;">
-                                            <span class="text-warning fw-bold d-block mb-1">🔄 Desglose de {{ count($p->metadata) }} Rollos:</span>
-                                            @foreach($p->metadata as $idx => $r)
-                                                <span class="badge bg-secondary me-1 mb-1">
-                                                    #{{ $idx + 1 }}: {{ $r['weight'] ?? 0 }} Kg
-                                                    @if(!empty($r['color'])) ({{ $r['color'] }}) @endif
-                                                </span>
-                                            @endforeach
-                                        </div>
+                                        @php
+                                            $pRolls = isset($p->metadata['rolls']) && is_array($p->metadata['rolls'])
+                                                ? $p->metadata['rolls']
+                                                : (isset($p->metadata['roll']) && is_array($p->metadata['roll'])
+                                                    ? [$p->metadata['roll']]
+                                                    : (is_array($p->metadata) ? $p->metadata : []));
+                                        @endphp
+                                        @if(count($pRolls) > 0)
+                                            <div class="mt-1 p-2 bg-dark rounded border border-secondary" style="font-size: 0.75rem;">
+                                                <span class="text-warning fw-bold d-block mb-1">🔄 Desglose de {{ count($pRolls) }} Rollos:</span>
+                                                @foreach($pRolls as $r)
+                                                    @if(is_array($r))
+                                                        <span class="badge bg-secondary me-1 mb-1">
+                                                            #{{ $loop->iteration }}: {{ $r['weight'] ?? 0 }} Kg
+                                                            @if(!empty($r['color'])) ({{ $r['color'] }}) @endif
+                                                            @if(!empty($r['batch'])) [L:{{ $r['batch'] }}] @endif
+                                                        </span>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        @endif
                                     @endif
                                 </td>
                                 <td>

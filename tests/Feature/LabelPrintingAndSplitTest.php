@@ -147,9 +147,9 @@ class LabelPrintingAndSplitTest extends TestCase
     }
 
     /**
-     * Test 3: Las bobinas variables NO se dividen en bultos en blanco al aprobarse, conservando su integridad.
+     * Test 3: Las bobinas múltiples con metadatos se dividen en bobinas individuales con sus pesos específicos.
      */
-    public function test_approve_does_not_split_variable_bobinas(): void
+    public function test_approve_splits_multi_bobinas_with_individual_weights(): void
     {
         $metadata = [
             ['weight' => 24.50, 'color' => 'Azul', 'batch' => 'LOTE-1'],
@@ -173,13 +173,21 @@ class LabelPrintingAndSplitTest extends TestCase
 
         $response->assertRedirect();
 
-        // El registro sigue existiendo con su ID y metadatos intactos
-        $this->assertDatabaseHas('bag_productions', [
-            'id'       => $prod->id,
-            'status'   => 'approved',
-            'quantity' => 2,
-            'weight'   => 48.30,
+        // El registro agrupado original fue reemplazado por 2 bobinas individuales
+        $this->assertDatabaseMissing('bag_productions', [
+            'id' => $prod->id,
         ]);
+
+        $splitRolls = BagProduction::where('bag_shift_id', $this->shift->id)
+            ->where('product_id', $this->variableProduct->id)
+            ->where('status', 'approved')
+            ->get();
+
+        $this->assertCount(2, $splitRolls);
+        $this->assertEquals(1.0, (float)$splitRolls[0]->quantity);
+        $this->assertEquals(24.50, (float)$splitRolls[0]->weight);
+        $this->assertEquals(1.0, (float)$splitRolls[1]->quantity);
+        $this->assertEquals(23.80, (float)$splitRolls[1]->weight);
     }
 
     /**

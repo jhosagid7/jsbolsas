@@ -143,6 +143,7 @@ class SyncService {
           'productions': pendingProds.map((p) => {
             'sync_id': p['sync_id'],
             'product_id': p['product_id'],
+            'machine_id': p['machine_id'],
             'quantity': p['quantity'],
             'weight': p['weight'],
             'recorded_at': p['recorded_at'],

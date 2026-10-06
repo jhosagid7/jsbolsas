@@ -19,9 +19,18 @@ class LocalDatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
+      onOpen: (db) async {
+        try {
+          await db.execute('''
+            UPDATE local_productions 
+            SET weight = ROUND(weight / 1000.0, 4) 
+            WHERE weight >= 500 AND UPPER(product_name) NOT LIKE '%BOBINA%' AND UPPER(product_name) NOT LIKE '%ROLLO%';
+          ''');
+        } catch (_) {}
+      },
     );
   }
 
@@ -34,7 +43,11 @@ class LocalDatabaseService {
         sku TEXT,
         cost REAL,
         price REAL,
-        is_variable_quantity INTEGER DEFAULT 0
+        sale_unit TEXT,
+        is_variable_quantity INTEGER DEFAULT 0,
+        target_units_per_shift REAL DEFAULT 5,
+        millar_per_bulto REAL DEFAULT 1,
+        unit_weight_kg REAL DEFAULT 0
       )
     ''');
 
@@ -74,6 +87,7 @@ class LocalDatabaseService {
         server_id INTEGER,
         shift_sync_id TEXT NOT NULL,
         product_id INTEGER NOT NULL,
+        machine_id INTEGER,
         product_name TEXT NOT NULL,
         quantity REAL NOT NULL,
         weight REAL NOT NULL,
@@ -111,6 +125,22 @@ class LocalDatabaseService {
         await db.execute('ALTER TABLE local_shifts ADD COLUMN machine_id INTEGER;');
       } catch (_) {}
     }
+    if (oldVersion < 4) {
+      try {
+        await db.execute('ALTER TABLE local_productions ADD COLUMN machine_id INTEGER;');
+      } catch (_) {}
+    }
+    if (oldVersion < 5) {
+      try {
+        await db.execute('ALTER TABLE cached_products ADD COLUMN target_units_per_shift REAL DEFAULT 5;');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE cached_products ADD COLUMN millar_per_bulto REAL DEFAULT 1;');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE cached_products ADD COLUMN unit_weight_kg REAL DEFAULT 0;');
+      } catch (_) {}
+    }
   }
 
   // ==================== PRODUCTS ====================
@@ -120,13 +150,21 @@ class LocalDatabaseService {
     batch.delete('cached_products');
     for (var p in products) {
       final isVar = (p['is_variable_quantity'] == true || p['is_variable_quantity'] == 1 || p['is_variable_quantity'] == '1') ? 1 : 0;
+      final targetUnits = (p['target_units_per_shift'] != null) ? double.tryParse(p['target_units_per_shift'].toString()) ?? 5.0 : 5.0;
+      final millarPerBulto = (p['millar_per_bulto'] != null) ? double.tryParse(p['millar_per_bulto'].toString()) ?? 1.0 : 1.0;
+      final unitWeight = (p['unit_weight_kg'] != null) ? double.tryParse(p['unit_weight_kg'].toString()) ?? 0.0 : 0.0;
+
       batch.insert('cached_products', {
         'id': p['id'],
         'name': p['name'] ?? '',
         'sku': p['sku'] ?? '',
         'cost': (p['cost'] != null) ? double.tryParse(p['cost'].toString()) ?? 0.0 : 0.0,
         'price': (p['price'] != null) ? double.tryParse(p['price'].toString()) ?? 0.0 : 0.0,
+        'sale_unit': p['sale_unit'] ?? 'BULTO',
         'is_variable_quantity': isVar,
+        'target_units_per_shift': targetUnits,
+        'millar_per_bulto': millarPerBulto,
+        'unit_weight_kg': unitWeight,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
@@ -216,6 +254,7 @@ class LocalDatabaseService {
   Future<int> saveLocalProduction({
     required String shiftSyncId,
     required int productId,
+    int? machineId,
     required String productName,
     required double quantity,
     required double weight,
@@ -229,6 +268,7 @@ class LocalDatabaseService {
     final id = await db.insert('local_productions', {
       'shift_sync_id': shiftSyncId,
       'product_id': productId,
+      'machine_id': machineId,
       'product_name': productName,
       'quantity': quantity,
       'weight': weight,
@@ -263,12 +303,23 @@ class LocalDatabaseService {
 
   Future<List<Map<String, dynamic>>> getShiftProductions(String shiftSyncId) async {
     final db = await instance.database;
-    return await db.query(
+    final results = await db.query(
       'local_productions',
       where: 'shift_sync_id = ?',
       whereArgs: [shiftSyncId],
       orderBy: 'recorded_at DESC',
     );
+    return results.map((row) {
+      final map = Map<String, dynamic>.from(row);
+      var w = (map['weight'] as num?)?.toDouble() ?? 0.0;
+      final name = (map['product_name'] ?? '').toString().toUpperCase();
+      final isRoll = name.contains('BOBINA') || name.contains('ROLLO');
+      if (w >= 500 && !isRoll) {
+        w = double.parse((w / 1000.0).toStringAsFixed(4));
+        map['weight'] = w;
+      }
+      return map;
+    }).toList();
   }
 
   Future<void> updateLocalProduction({

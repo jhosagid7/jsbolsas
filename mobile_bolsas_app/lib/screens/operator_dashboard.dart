@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../services/local_db.dart';
 import '../services/sync_service.dart';
@@ -29,6 +30,15 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
   final LocalDatabaseService _db = LocalDatabaseService.instance;
   final SyncService _sync = SyncService.instance;
   final _uuid = const Uuid();
+
+  // Navigation state
+  int _currentTabIndex = 0;
+
+  // Payroll & Tariff State
+  double _userDailySalary = 15.0;
+  double _userWeeklySalary = 90.0;
+  int _userWorkDays = 6;
+  bool _payPartialPackages = true;
 
   // State
   Map<String, dynamic>? _activeShift;
@@ -74,35 +84,213 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
     super.dispose();
   }
 
+  Map<String, dynamic> _getProductUnitLabels(Map<String, dynamic>? p) {
+    if (p == null) {
+      return {
+        'unit_type': 'bulto',
+        'meta_suffix': 'bultos/turno',
+        'primary_label': 'por bulto',
+        'secondary_label': '',
+        'unit_name_singular': 'bulto',
+        'unit_name_plural': 'bultos',
+        'button_label': 'REGISTRAR PRODUCCIÓN',
+        'input_label': 'Cantidad (Bultos)',
+        'icon': Icons.inventory_2_outlined,
+        'color': const Color(0xFF38BDF8),
+      };
+    }
+
+    final name = (p['name'] ?? '').toString().toUpperCase();
+    final saleUnit = (p['sale_unit'] ?? '').toString().toUpperCase();
+    final isVar = p['is_variable_quantity'] == 1 || p['is_variable_quantity'] == true || p['is_variable_quantity'] == '1';
+    final millarPerBulto = (p['millar_per_bulto'] != null)
+        ? (double.tryParse(p['millar_per_bulto'].toString()) ?? 1.0)
+        : 1.0;
+
+    if (name.contains('ROLLO') || saleUnit == 'ROLLO') {
+      return {
+        'unit_type': 'rollo',
+        'meta_suffix': 'rollos/turno',
+        'primary_label': 'por rollo',
+        'secondary_label': '',
+        'unit_name_singular': 'rollo',
+        'unit_name_plural': 'rollos',
+        'button_label': 'REGISTRAR ROLLOS',
+        'input_label': 'Cantidad (Rollos)',
+        'icon': Icons.rotate_right_rounded,
+        'color': Colors.amberAccent,
+      };
+    }
+
+    if (isVar || name.contains('BOBINA') || saleUnit == 'BOBINA' || name.contains('CADENETA')) {
+      return {
+        'unit_type': 'bobina',
+        'meta_suffix': 'bobinas/turno',
+        'primary_label': 'por bobina',
+        'secondary_label': '',
+        'unit_name_singular': 'bobina',
+        'unit_name_plural': 'bobinas',
+        'button_label': 'REGISTRAR BOBINAS',
+        'input_label': 'Cantidad (Bobinas)',
+        'icon': Icons.rotate_right_rounded,
+        'color': Colors.amberAccent,
+      };
+    }
+
+    if (saleUnit == 'KG') {
+      return {
+        'unit_type': 'kg',
+        'meta_suffix': 'Kg/turno',
+        'primary_label': 'por Kg',
+        'secondary_label': '',
+        'unit_name_singular': 'Kg',
+        'unit_name_plural': 'Kg',
+        'button_label': 'REGISTRAR KG',
+        'input_label': 'Cantidad (Kg)',
+        'icon': Icons.scale_rounded,
+        'color': Colors.amberAccent,
+      };
+    }
+
+    if (millarPerBulto > 1) {
+      final milCountStr = millarPerBulto == millarPerBulto.roundToDouble()
+          ? millarPerBulto.toInt().toString()
+          : millarPerBulto.toStringAsFixed(1);
+      return {
+        'unit_type': 'bulto_multi_millar',
+        'meta_suffix': 'bultos/turno ($milCountStr mil/bulto)',
+        'primary_label': 'por bulto',
+        'secondary_label': 'por millar',
+        'unit_name_singular': 'bulto',
+        'unit_name_plural': 'bultos',
+        'button_label': 'REGISTRAR BULTOS',
+        'input_label': 'Cantidad ($milCountStr mil/bulto)',
+        'icon': Icons.inventory_2_outlined,
+        'color': const Color(0xFF38BDF8),
+      };
+    }
+
+    if (saleUnit == 'MILLAR' || (name.contains('MILLAR') && !name.contains('BULTO'))) {
+      return {
+        'unit_type': 'millar',
+        'meta_suffix': 'millares/turno',
+        'primary_label': 'por millar',
+        'secondary_label': '',
+        'unit_name_singular': 'millar',
+        'unit_name_plural': 'millares',
+        'button_label': 'REGISTRAR MILLARES',
+        'input_label': 'Cantidad (Millares)',
+        'icon': Icons.inventory_2_outlined,
+        'color': const Color(0xFF38BDF8),
+      };
+    }
+
+    if (saleUnit == 'PAQUETE' || name.contains('PAQUETE') || name.contains('UND') || name.contains('UNID')) {
+      return {
+        'unit_type': 'paquete',
+        'meta_suffix': 'paquetes/turno',
+        'primary_label': 'por paquete',
+        'secondary_label': '',
+        'unit_name_singular': 'paquete',
+        'unit_name_plural': 'paquetes',
+        'button_label': 'REGISTRAR PAQUETES',
+        'input_label': 'Cantidad (Paquetes)',
+        'icon': Icons.inventory_2_outlined,
+        'color': const Color(0xFF38BDF8),
+      };
+    }
+
+    return {
+      'unit_type': 'bulto',
+      'meta_suffix': 'bultos/turno',
+      'primary_label': 'por bulto',
+      'secondary_label': '',
+      'unit_name_singular': 'bulto',
+      'unit_name_plural': 'bultos',
+      'button_label': 'REGISTRAR BULTOS',
+      'input_label': 'Cantidad (Bultos)',
+      'icon': Icons.inventory_2_outlined,
+      'color': const Color(0xFF38BDF8),
+    };
+  }
+
   bool _isRollProduct(Map<String, dynamic>? p) {
     if (p == null) return false;
-    final name = (p['name'] ?? '').toString().toUpperCase();
-    final isVar = p['is_variable_quantity'] == 1 || p['is_variable_quantity'] == true || p['is_variable_quantity'] == '1';
-    return isVar || name.contains('BOBINA') || name.contains('ROLLO');
+    final type = _getProductUnitLabels(p)['unit_type'] as String;
+    return type == 'bobina' || type == 'rollo';
   }
 
   String _getProductUnitLabel(Map<String, dynamic>? p) {
-    if (p == null) return 'Cantidad';
-    if (_isRollProduct(p)) return 'Cantidad (Rollos / Bobinas)';
-    final name = (p['name'] ?? '').toString().toUpperCase();
-    if (name.contains('PAQUETE') || name.contains('MILLAR') || name.contains('BOLSA')) {
-      return 'Cantidad (Paquetes / Bolsas)';
-    }
-    return 'Cantidad (Bultos / Unidades)';
+    return _getProductUnitLabels(p)['input_label'] as String;
   }
 
   String _getButtonLabel(Map<String, dynamic>? p) {
-    if (p == null) return 'REGISTRAR PRODUCCIÓN';
-    if (_isRollProduct(p)) return 'REGISTRAR BOBINAS / ROLLOS';
-    final name = (p['name'] ?? '').toString().toUpperCase();
-    if (name.contains('PAQUETE') || name.contains('BOLSA')) {
-      return 'REGISTRAR PAQUETES / BOLSAS';
+    return _getProductUnitLabels(p)['button_label'] as String;
+  }
+
+  Map<String, double> _calculateLaborTariff(Map<String, dynamic> product) {
+    final targetUnits = (product['target_units_per_shift'] != null)
+        ? (double.tryParse(product['target_units_per_shift'].toString()) ?? 5.0)
+        : 5.0;
+    final safeTarget = targetUnits > 0 ? targetUnits : 1.0;
+    final packageTariff = _userDailySalary / safeTarget;
+
+    final millarPerBulto = (product['millar_per_bulto'] != null)
+        ? (double.tryParse(product['millar_per_bulto'].toString()) ?? 1.0)
+        : 1.0;
+    final safeMillar = millarPerBulto > 0 ? millarPerBulto : 1.0;
+    final fractionTariff = packageTariff / safeMillar;
+
+    return {
+      'package_tariff': packageTariff,
+      'fraction_tariff': fractionTariff,
+      'target_units': safeTarget,
+    };
+  }
+
+  double _calculateShiftEarnings() {
+    double total = 0.0;
+    for (var prod in _shiftProductions) {
+      final productId = prod['product_id'];
+      final qty = (prod['quantity'] as num?)?.toDouble() ?? 0.0;
+      final p = _cachedProducts.firstWhere(
+        (cp) => cp['id'] == productId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (p.isNotEmpty) {
+        final tariffs = _calculateLaborTariff(p);
+        final pkgTariff = tariffs['package_tariff'] ?? 0.0;
+        final fracTariff = tariffs['fraction_tariff'] ?? 0.0;
+        final millarPerBulto = (p['millar_per_bulto'] != null)
+            ? (double.tryParse(p['millar_per_bulto'].toString()) ?? 1.0)
+            : 1.0;
+
+        if (millarPerBulto > 1) {
+          final completed = (qty / millarPerBulto).floorToDouble();
+          final frac = qty % millarPerBulto;
+          if (_payPartialPackages) {
+            total += (completed * pkgTariff) + (frac * fracTariff);
+          } else {
+            total += (completed * pkgTariff);
+          }
+        } else {
+          total += qty * pkgTariff;
+        }
+      } else {
+        total += qty * (_userDailySalary / 5.0);
+      }
     }
-    return 'REGISTRAR BULTOS';
+    return total;
   }
 
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
+
+    final prefs = await SharedPreferences.getInstance();
+    final dailySal = prefs.getDouble('daily_salary') ?? 15.0;
+    final weeklySal = prefs.getDouble('weekly_salary') ?? 90.0;
+    final workDays = prefs.getInt('work_days_per_week') ?? 6;
+    final payPartial = prefs.getBool('pay_partial_packages') ?? true;
 
     final products = await _db.getCachedProducts();
     final machines = await _db.getCachedMachines();
@@ -116,6 +304,10 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
     final pendingProds = await _db.getPendingSyncProductions();
 
     setState(() {
+      _userDailySalary = dailySal;
+      _userWeeklySalary = weeklySal;
+      _userWorkDays = workDays;
+      _payPartialPackages = payPartial;
       _cachedProducts = products;
       _cachedMachines = machines;
       if (_cachedMachines.isNotEmpty && _selectedMachineId == null) {
@@ -349,7 +541,15 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                             itemBuilder: (context, idx) {
                               final p = filtered[idx];
                               final isSelected = initial != null && initial['id'] == p['id'];
-                              final isRoll = _isRollProduct(p);
+                              final labels = _getProductUnitLabels(p);
+                              final isMultiMillar = labels['unit_type'] == 'bulto_multi_millar';
+
+                              String badgeText = (labels['unit_type'] as String).toUpperCase();
+                              if (isMultiMillar) {
+                                final milCount = (double.tryParse(p['millar_per_bulto']?.toString() ?? '1') ?? 1).toInt();
+                                badgeText = '$milCount MIL/BULTO';
+                              }
+
                               return ListTile(
                                 dense: true,
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -360,8 +560,8 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
-                                    isRoll ? Icons.rotate_right_rounded : Icons.inventory_2_outlined,
-                                    color: isSelected ? Colors.white : (isRoll ? Colors.amberAccent : const Color(0xFF38BDF8)),
+                                    labels['icon'] as IconData,
+                                    color: isSelected ? Colors.white : (labels['color'] as Color),
                                     size: 18,
                                   ),
                                 ),
@@ -373,15 +573,17 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                                       ),
                                     ),
-                                    if (isRoll)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.amber.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: const Text('BOBINA', style: TextStyle(color: Colors.amberAccent, fontSize: 9, fontWeight: FontWeight.bold)),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: (labels['color'] as Color).withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(4),
                                       ),
+                                      child: Text(
+                                        badgeText,
+                                        style: TextStyle(color: labels['color'] as Color, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 subtitle: Text('SKU: ${p['sku'] ?? 'N/A'}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
@@ -437,7 +639,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
     }
 
     final qty = double.tryParse(_quantityController.text.trim()) ?? 0.0;
-    final weight = double.tryParse(_weightController.text.trim()) ?? 0.0;
+    var weight = double.tryParse(_weightController.text.trim()) ?? 0.0;
 
     if (qty <= 0 || weight <= 0) {
       if (mounted) {
@@ -446,6 +648,11 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
         );
       }
       return;
+    }
+
+    // Auto-sanitización si se ingresó en gramos desde báscula de mesa (ej. 12030 g -> 12.03 Kg)
+    if (weight >= 500 && !_isRollProduct(_selectedProduct)) {
+      weight = double.parse((weight / 1000.0).toStringAsFixed(4));
     }
 
     final now = DateTime.now();
@@ -458,6 +665,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
     await _db.saveLocalProduction(
       shiftSyncId: _activeShift!['sync_id'],
       productId: _selectedProduct!['id'],
+      machineId: _selectedMachineId,
       productName: _selectedProduct!['name'],
       quantity: qty,
       weight: weight,
@@ -768,13 +976,18 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                 label: const Text('GUARDAR CAMBIOS'),
                 onPressed: () async {
                   final newQty = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
-                  final newWeight = double.tryParse(weightCtrl.text.trim()) ?? 0.0;
+                  var newWeight = double.tryParse(weightCtrl.text.trim()) ?? 0.0;
 
                   if (newQty <= 0 || newWeight <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Ingrese cantidad y peso válidos'), backgroundColor: Colors.red),
                     );
                     return;
+                  }
+
+                  // Auto-sanitización si se ingresó en gramos desde báscula de mesa (ej. 12030 g -> 12.03 Kg)
+                  if (newWeight >= 500 && !isRoll) {
+                    newWeight = double.parse((newWeight / 1000.0).toStringAsFixed(4));
                   }
 
                   Navigator.pop(ctx);
@@ -991,21 +1204,519 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          : _buildTabBody(),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1C2541),
+          border: Border(top: BorderSide(color: Colors.white10)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentTabIndex,
+          onTap: (index) => setState(() => _currentTabIndex = index),
+          backgroundColor: const Color(0xFF1C2541),
+          selectedItemColor: const Color(0xFF38BDF8),
+          unselectedItemColor: Colors.white54,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 11),
+          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontSize: 10),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded),
+              activeIcon: Icon(Icons.dashboard_rounded, color: Color(0xFF38BDF8)),
+              label: 'Turno',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.scale_rounded),
+              activeIcon: Icon(Icons.scale_rounded, color: Color(0xFF38BDF8)),
+              label: 'Pesaje',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.format_list_bulleted_rounded),
+              activeIcon: Icon(Icons.format_list_bulleted_rounded, color: Color(0xFF38BDF8)),
+              label: 'Historial',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.payments_rounded),
+              activeIcon: Icon(Icons.payments_rounded, color: Color(0xFF10B981)),
+              label: 'Mi Nómina',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabBody() {
+    switch (_currentTabIndex) {
+      case 0:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildShiftCard(),
+              if (_activeShift != null) ...[
+                const SizedBox(height: 16),
+                _buildEarningsHighlightCard(),
+                const SizedBox(height: 16),
+                _buildGoalProgressCard(),
+                const SizedBox(height: 16),
+                _buildQuickActions(),
+              ],
+            ],
+          ),
+        );
+      case 1:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_activeShift == null) ...[
+                _buildOpenShiftNotice(),
+              ] else ...[
+                _buildProductionFormCard(),
+              ],
+            ],
+          ),
+        );
+      case 2:
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildShiftHistoryList(),
+            ],
+          ),
+        );
+      case 3:
+        return _buildPayrollTab();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildEarningsHighlightCard() {
+    final earnings = _calculateShiftEarnings();
+    double totalUnits = 0;
+    for (var p in _shiftProductions) {
+      totalUnits += (p['quantity'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF0F766E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x4D000000), blurRadius: 10, offset: Offset(0, 4)),
+        ],
+        border: Border.all(color: const Color(0xFF34D399).withOpacity(0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
                 children: [
-                  _buildShiftCard(),
-                  const SizedBox(height: 16),
-                  if (_activeShift != null) ...[
-                    _buildProductionFormCard(),
-                    const SizedBox(height: 16),
-                    _buildShiftHistoryList(),
-                  ],
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.attach_money_rounded, color: Color(0xFF6EE7B7), size: 20),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'MI GANANCIA DEL TURNO',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: const Color(0xFFD1FAE5),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                 ],
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF34D399).withOpacity(0.4)),
+                ),
+                child: const Text(
+                  'Destajo Ganado',
+                  style: TextStyle(color: Color(0xFF6EE7B7), fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '\$ ${earnings.toStringAsFixed(2)}',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'USD',
+                style: GoogleFonts.plusJakartaSans(
+                  color: const Color(0xFFA7F3D0),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Acumulado hoy según tu producción y tarifa de ficha técnica',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.25),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    const Text('Salario Base Día', style: TextStyle(color: Colors.white60, fontSize: 10)),
+                    const SizedBox(height: 2),
+                    Text('\$ ${_userDailySalary.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                Container(width: 1, height: 20, color: Colors.white24),
+                Column(
+                  children: [
+                    const Text('Bultos/Rollos', style: TextStyle(color: Colors.white60, fontSize: 10)),
+                    const SizedBox(height: 2),
+                    Text(totalUnits.toStringAsFixed(0), style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                Container(width: 1, height: 20, color: Colors.white24),
+                Column(
+                  children: [
+                    const Text('Jornada', style: TextStyle(color: Colors.white60, fontSize: 10)),
+                    const SizedBox(height: 2),
+                    Text('$_userWorkDays días', style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoalProgressCard() {
+    double totalUnits = 0.0;
+    for (var p in _shiftProductions) {
+      totalUnits += (p['quantity'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    double targetGoal = 5.0;
+    if (_selectedProduct != null && _selectedProduct!['target_units_per_shift'] != null) {
+      targetGoal = (double.tryParse(_selectedProduct!['target_units_per_shift'].toString()) ?? 5.0);
+    }
+    if (targetGoal <= 0) targetGoal = 5.0;
+    final progressPercent = (totalUnits / targetGoal).clamp(0.0, 1.0);
+    final percentFormatted = (totalUnits / targetGoal * 100).toStringAsFixed(0);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C2541),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.flag_circle_outlined, color: Color(0xFF38BDF8), size: 20),
+                  const SizedBox(width: 8),
+                  Text('Meta de Producción del Turno',
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Text('$percentFormatted%',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: totalUnits >= targetGoal ? const Color(0xFF10B981) : const Color(0xFF38BDF8),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  )),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progressPercent,
+              minHeight: 10,
+              backgroundColor: const Color(0xFF0F172A),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                totalUnits >= targetGoal ? const Color(0xFF10B981) : const Color(0xFF38BDF8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${totalUnits.toStringAsFixed(0)} de ${targetGoal.toStringAsFixed(0)} unidades meta',
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+              Text(
+                totalUnits >= targetGoal
+                    ? '🎯 ¡Meta Alcanzada!'
+                    : 'Faltan ${(targetGoal - totalUnits).clamp(0, 9999).toStringAsFixed(0)} unid.',
+                style: TextStyle(
+                  color: totalUnits >= targetGoal ? const Color(0xFF10B981) : Colors.amberAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0284C7),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.scale_rounded, size: 18),
+            label: const Text('Cargar Pesaje', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: () => setState(() => _currentTabIndex = 1),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF38BDF8),
+              side: const BorderSide(color: Color(0xFF38BDF8)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.format_list_bulleted_rounded, size: 18),
+            label: const Text('Ver Registros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: () => setState(() => _currentTabIndex = 2),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOpenShiftNotice() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C2541),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.lock_clock_rounded, size: 48, color: Colors.amberAccent),
+          const SizedBox(height: 12),
+          Text(
+            'Turno Cerrado',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Para registrar pesajes de producción, debes abrir un turno primero.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Ir a Abrir Turno', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () => setState(() => _currentTabIndex = 0),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPayrollTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildEarningsHighlightCard(),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C2541),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.badge_outlined, color: Color(0xFF38BDF8), size: 20),
+                    const SizedBox(width: 8),
+                    Text('Ficha Salarial de Operario',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _payrollInfoRow('Operador:', widget.userName),
+                _payrollInfoRow('Salario Semanal:', '\$ ${_userWeeklySalary.toStringAsFixed(2)} USD'),
+                _payrollInfoRow('Jornada Laboral:', '$_userWorkDays días / semana'),
+                _payrollInfoRow('Salario Diario Base:', '\$ ${_userDailySalary.toStringAsFixed(2)} USD / día'),
+                _payrollInfoRow('Pago de Fracciones:', _payPartialPackages ? 'Habilitado (por millar/rollo)' : 'Retenido hasta completar bulto'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Tarifas por Destajo según Ficha Técnica',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          if (_cachedProducts.isEmpty)
+            const Center(child: Text('No hay productos en catálogo', style: TextStyle(color: Colors.white38)))
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _cachedProducts.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (ctx, idx) {
+                final p = _cachedProducts[idx];
+                final tariffs = _calculateLaborTariff(p);
+                final pkgTariff = tariffs['package_tariff'] ?? 0.0;
+                final targetUnits = tariffs['target_units'] ?? 5.0;
+                final fracTariff = tariffs['fraction_tariff'] ?? 0.0;
+                final labels = _getProductUnitLabels(p);
+                final isMultiMillar = labels['unit_type'] == 'bulto_multi_millar';
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C2541),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: (labels['color'] as Color).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(labels['icon'] as IconData, color: labels['color'] as Color, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p['name'] ?? '',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 2),
+                            Text('Meta: ${targetUnits.toStringAsFixed(0)} ${labels['meta_suffix']} • SKU: ${p['sku'] ?? 'N/A'}',
+                                style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('\$ ${pkgTariff.toStringAsFixed(2)}',
+                              style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text(
+                            labels['primary_label'] as String,
+                            style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                          if (isMultiMillar) ...[
+                            const SizedBox(height: 2),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF38BDF8).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '\$ ${fracTariff.toStringAsFixed(3)} / mil',
+                                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _payrollInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+        ],
+      ),
     );
   }
 
@@ -1232,6 +1943,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
   }
 
   Widget _buildProductionFormCard() {
+    final prodLabels = _getProductUnitLabels(_selectedProduct);
     final isRoll = _isRollProduct(_selectedProduct);
 
     return Container(
@@ -1264,6 +1976,51 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
           ),
           const SizedBox(height: 10),
 
+          // Selector Rápido de Máquina Activa (Cambio Dinámico en Turno)
+          if (_cachedMachines.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0B132B),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.precision_manufacturing_rounded, color: Color(0xFF38BDF8), size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Máquina:', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: _selectedMachineId,
+                        dropdownColor: const Color(0xFF1C2541),
+                        isExpanded: true,
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        items: _cachedMachines.map((m) {
+                          return DropdownMenuItem<int>(
+                            value: m['id'] as int?,
+                            child: Text(
+                              '[${m['code']}] ${m['name']}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() => _selectedMachineId = val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Selector de Producto
           InkWell(
             onTap: () async {
@@ -1282,13 +2039,13 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF0B132B),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: isRoll ? Colors.amberAccent.withOpacity(0.5) : const Color(0xFF38BDF8).withOpacity(0.4)),
+                border: Border.all(color: (prodLabels['color'] as Color).withOpacity(0.5)),
               ),
               child: Row(
                 children: [
                   Icon(
-                    isRoll ? Icons.rotate_right_rounded : Icons.inventory_2_outlined,
-                    color: isRoll ? Colors.amberAccent : const Color(0xFF38BDF8),
+                    prodLabels['icon'] as IconData,
+                    color: prodLabels['color'] as Color,
                     size: 22,
                   ),
                   const SizedBox(width: 10),
@@ -1302,8 +2059,11 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (_selectedProduct != null && _selectedProduct!['sku'] != null)
-                          Text('SKU: ${_selectedProduct!['sku']}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        if (_selectedProduct != null)
+                          Text(
+                            'SKU: ${_selectedProduct!['sku'] ?? 'N/A'} • ${prodLabels['meta_suffix']}',
+                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                          ),
                       ],
                     ),
                   ),
@@ -1549,8 +2309,14 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
               final recTime = DateTime.parse(item['recorded_at']);
               final formattedTime = DateFormat('hh:mm a').format(recTime);
 
-              final isRoll = (item['product_name'] ?? '').toString().toUpperCase().contains('BOBINA') ||
-                             (item['product_name'] ?? '').toString().toUpperCase().contains('ROLLO');
+              final matchedProd = _cachedProducts.firstWhere(
+                (cp) => cp['id'] == item['product_id'] || (cp['name'] == item['product_name']),
+                orElse: () => <String, dynamic>{'name': item['product_name'] ?? ''},
+              );
+              final histLabels = _getProductUnitLabels(matchedProd);
+              final isRoll = histLabels['unit_type'] == 'bobina' || histLabels['unit_type'] == 'rollo';
+              final qtyNum = (item['quantity'] as num?)?.toDouble() ?? 1.0;
+              final unitLabel = (qtyNum == 1.0) ? histLabels['unit_name_singular'] : histLabels['unit_name_plural'];
 
               return Container(
                 padding: const EdgeInsets.all(12),
@@ -1564,12 +2330,12 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: isRoll ? Colors.amber.withOpacity(0.15) : const Color(0xFF0F172A),
+                        color: (histLabels['color'] as Color).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
-                        isRoll ? Icons.rotate_right_rounded : Icons.inventory_2_outlined,
-                        color: isRoll ? Colors.amberAccent : const Color(0xFF38BDF8),
+                        histLabels['icon'] as IconData,
+                        color: histLabels['color'] as Color,
                         size: 20,
                       ),
                     ),
@@ -1590,7 +2356,7 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                           Row(
                             children: [
                               Text(
-                                '${item['quantity']} ${isRoll ? 'Rollos' : 'Bultos/Paquetes'}',
+                                '${item['quantity']} $unitLabel',
                                 style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(width: 8),
@@ -1641,13 +2407,23 @@ class _OperatorDashboardScreenState extends State<OperatorDashboardScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          '${item['weight']} Kg',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFF59E0B),
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Builder(
+                          builder: (_) {
+                            var w = (item['weight'] as num?)?.toDouble() ?? 0.0;
+                            final name = (item['product_name'] ?? '').toString().toUpperCase();
+                            final isRoll = name.contains('BOBINA') || name.contains('ROLLO');
+                            if (w >= 500 && !isRoll) {
+                              w = w / 1000.0;
+                            }
+                            return Text(
+                              '${w.toStringAsFixed(2)} Kg',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFFF59E0B),
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 2),
                         Row(

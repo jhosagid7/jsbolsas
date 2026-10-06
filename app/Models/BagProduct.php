@@ -34,27 +34,31 @@ class BagProduct extends Model
         'target_units_per_shift',
         'target_daily_profit',
         'is_variable_quantity',
+        'is_composite_rolls',
+        'suggested_rolls_per_package',
         'is_active',
     ];
 
     protected $casts = [
-        'production_formula_id'  => 'integer',
-        'millar_per_bulto'       => 'decimal:4',
-        'width_inch'             => 'decimal:2',
-        'length_inch'            => 'decimal:2',
-        'gauge_caliber'          => 'decimal:4',
-        'unit_weight_kg'         => 'decimal:4',
-        'real_total_weight_kg'   => 'decimal:4',
-        'margin_percentage'      => 'decimal:2',
-        'cost'                   => 'decimal:4',
-        'price'                  => 'decimal:4',
-        'price_tier_1'           => 'decimal:4',
-        'price_tier_2'           => 'decimal:4',
-        'price_tier_3'           => 'decimal:4',
-        'target_units_per_shift' => 'integer',
-        'target_daily_profit'    => 'decimal:4',
-        'is_variable_quantity'   => 'boolean',
-        'is_active'              => 'boolean',
+        'production_formula_id'       => 'integer',
+        'millar_per_bulto'            => 'decimal:4',
+        'width_inch'                  => 'decimal:2',
+        'length_inch'                 => 'decimal:2',
+        'gauge_caliber'               => 'decimal:4',
+        'unit_weight_kg'              => 'decimal:4',
+        'real_total_weight_kg'        => 'decimal:4',
+        'margin_percentage'           => 'decimal:2',
+        'cost'                        => 'decimal:4',
+        'price'                       => 'decimal:4',
+        'price_tier_1'                => 'decimal:4',
+        'price_tier_2'                => 'decimal:4',
+        'price_tier_3'                => 'decimal:4',
+        'target_units_per_shift'      => 'integer',
+        'target_daily_profit'         => 'decimal:4',
+        'is_variable_quantity'        => 'boolean',
+        'is_composite_rolls'          => 'boolean',
+        'suggested_rolls_per_package' => 'integer',
+        'is_active'                   => 'boolean',
     ];
 
     protected $appends = [
@@ -302,5 +306,72 @@ class BagProduct extends Model
         $this->price_tier_3 = $tiers['tier_3'];
 
         $this->save();
+    }
+
+    /**
+     * Determina si el producto es un Bulto Compuesto de Bobinitas / Sub-bobinas de peso variable
+     */
+    public function isCompositeBobinaBulto(): bool
+    {
+        return (bool)($this->is_variable_quantity && $this->is_composite_rolls);
+    }
+
+    /**
+     * Breakdown units into complete packages and loose fractional units.
+     */
+    public function calculateBreakdown(float $units): array
+    {
+        $capacity = max(0.0001, (float)($this->millar_per_bulto ?: 1));
+        $completed = floor($units / $capacity);
+        $fraction = round($units - ($completed * $capacity), 4);
+
+        return [
+            'completed_packages'   => (float)$completed,
+            'fractional_units'     => (float)$fraction,
+            'is_package_completed' => ($fraction == 0.0),
+        ];
+    }
+
+    /**
+     * Calculate weight quality grading (A, B, C) based on comparison with standard theoretical weight.
+     * Tolerance: +/- 3% is Grade 'B' (Optimal). > +3% is 'A' (Overweight). < -3% is 'C' (Underweight).
+     */
+    public function calculateWeightQualityGrade(float $actualWeight, float $quantity = 1.0, float $fractionalUnits = 0.0): array
+    {
+        if ($this->is_variable_quantity) {
+            return [
+                'grade'              => 'B',
+                'deviation_percent'  => 0.0,
+                'theoretical_weight' => round($actualWeight, 4),
+                'actual_weight'      => round($actualWeight, 4),
+            ];
+        }
+
+        $unitWeight = (float)($this->unit_weight_kg > 0 ? $this->unit_weight_kg : $this->calculatePhysicalWeight());
+        $millarPerBulto = (float)($this->millar_per_bulto ?: 1);
+        $packageWeight = (float)($this->real_total_weight_kg > 0 ? $this->real_total_weight_kg : ($unitWeight * $millarPerBulto));
+
+        $theoretical = ($quantity * $packageWeight) + ($fractionalUnits * $unitWeight);
+        if ($theoretical <= 0.0001) {
+            $theoretical = $actualWeight > 0 ? $actualWeight : 1.0;
+        }
+
+        $deviation = (($actualWeight - $theoretical) / $theoretical) * 100.0;
+        $deviation = round($deviation, 2);
+
+        if (abs($deviation) <= 3.0) {
+            $grade = 'B';
+        } elseif ($deviation > 3.0) {
+            $grade = 'A';
+        } else {
+            $grade = 'C';
+        }
+
+        return [
+            'grade'              => $grade,
+            'deviation_percent'  => $deviation,
+            'theoretical_weight' => round($theoretical, 4),
+            'actual_weight'      => round($actualWeight, 4),
+        ];
     }
 }

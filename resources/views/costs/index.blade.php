@@ -427,15 +427,44 @@
                                 <div class="col-lg-6 border-end border-secondary-subtle pe-lg-4">
                                     <h6 class="fw-bold text-info mb-3">1. Tipo de Producto, Fórmula & Especificaciones</h6>
 
-                                    <!-- Switch de Modo Bobina / Venta por Kilo -->
-                                    <div class="form-check form-switch mb-3 p-3 bg-black rounded border border-warning">
-                                        <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" name="is_variable_quantity" value="1" id="is_variable_{{ $p->id }}" {{ $p->is_variable_quantity ? 'checked' : '' }} onchange="toggleBobinaMode('{{ $p->id }}')">
-                                        <label class="form-check-label fw-bold text-warning fs-6" for="is_variable_{{ $p->id }}">
-                                            🔄 ¿Es Bobina / Venta por Kilo? (Peso Variable)
-                                        </label>
-                                        <small class="text-white-50 d-block mt-1 ms-4" style="font-size: 11px;">
-                                            Al activar: se ocultan las medidas (ancho/largo), la unidad se fija en <strong>KG</strong> y el peso real en <strong>1.00 Kg</strong> para costear por kilogramo.
-                                        </small>
+                                    <!-- Switch de Modo Bobina / Venta por Kilo y Bulto Compuesto -->
+                                    <div class="p-3 bg-black rounded border border-warning mb-3">
+                                        <div class="form-check form-switch mb-1">
+                                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" name="is_variable_quantity" value="1" id="is_variable_{{ $p->id }}" {{ $p->is_variable_quantity ? 'checked' : '' }} onchange="toggleBobinaMode('{{ $p->id }}')">
+                                            <label class="form-check-label fw-bold text-warning fs-6" for="is_variable_{{ $p->id }}">
+                                                🔄 ¿Es Bobina / Venta por Kilo? (Peso Variable)
+                                            </label>
+                                            <small class="text-white-50 d-block mt-1 ms-4" style="font-size: 11px;">
+                                                Al activar: se ocultan las medidas (ancho/largo), la unidad se fija en <strong>KG</strong> y el peso real en <strong>1.00 Kg</strong> para costear por kilogramo.
+                                            </small>
+                                        </div>
+
+                                        <!-- Sub-opción: Bulto Compuesto de Bobinas -->
+                                        <div class="mt-3 pt-2 border-top border-secondary-subtle" id="composite_rolls_box_{{ $p->id }}" style="{{ !$p->is_variable_quantity ? 'display:none;' : '' }}">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" name="is_composite_rolls" value="1" id="is_composite_{{ $p->id }}" {{ $p->is_composite_rolls ? 'checked' : '' }} onchange="toggleCompositeMode('{{ $p->id }}')">
+                                                <label class="form-check-label fw-bold text-info fs-6" for="is_composite_{{ $p->id }}">
+                                                    📦 ¿Es Bulto Compuesto de Bobinas? (Ej. Bambi 3.4 / 3.6 / 4.0)
+                                                </label>
+                                                <small class="text-white-50 d-block ms-4" style="font-size: 11px;">
+                                                    Activa el agrupamiento de <strong>N bobinitas individuales</strong> de peso variable que juntas forman <strong>1 Bulto</strong>.
+                                                </small>
+                                            </div>
+
+                                            <div class="p-3 bg-dark rounded border border-info ms-4 mt-2" id="suggested_rolls_container_{{ $p->id }}" style="{{ !$p->is_composite_rolls ? 'display:none;' : '' }}">
+                                                <label class="form-label small text-info fw-bold mb-1 d-flex align-items-center justify-content-between">
+                                                    <span><i class="bi bi-disc text-warning me-1"></i> Bobinas Sugeridas por Bulto (Referencia Estándar):</span>
+                                                    <span class="badge bg-info text-dark font-monospace">1 Bulto = N Bobinas</span>
+                                                </label>
+                                                <div class="input-group input-group-sm" style="max-width: 200px;">
+                                                    <input type="number" min="1" max="50" name="suggested_rolls_per_package" id="suggested_rolls_{{ $p->id }}" class="form-control bg-black text-warning font-monospace fw-bold fs-6" value="{{ $p->suggested_rolls_per_package ?? 9 }}">
+                                                    <span class="input-group-text bg-secondary text-white fw-bold">Bobinas</span>
+                                                </div>
+                                                <small class="text-white-50 d-block mt-2" style="font-size: 10.5px;">
+                                                    💡 <strong>Flexibilidad en Planta:</strong> Abre por defecto esta cantidad de casillas en la APK y báscula. El operario o supervisor podrá agregar o quitar bobinas (<strong>+ / -</strong>) dinámicamente según el pesaje real.
+                                                </small>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div class="alert alert-warning py-2 small mb-3" id="bobina_alert_{{ $p->id }}" style="{{ !$p->is_variable_quantity ? 'display:none;' : '' }}">
@@ -491,18 +520,19 @@
                                             </label>
                                             <select class="form-select bg-dark text-warning border-secondary fw-bold" id="preset_{{ $p->id }}" onchange="applyPresentationPreset('{{ $p->id }}', this)">
                                                 <option value="CUSTOM" data-unit="{{ $p->sale_unit ?? 'BULTO' }}" data-factor="{{ $p->millar_per_bulto ?? 1 }}">⚙️ Personalizado / Otro</option>
-                                                <option value="MILLAR" data-unit="MILLAR" data-factor="1.0">📦 Millar Estándar (1.0)</option>
-                                                <option value="BULTO_20" data-unit="BULTO" data-factor="20.0">📦 Bulto (20 Millares)</option>
-                                                <option value="BULTO_15" data-unit="BULTO" data-factor="15.0">📦 Bulto (15 Millares)</option>
-                                                <option value="BULTO_10" data-unit="BULTO" data-factor="10.0">📦 Bulto (10 Millares)</option>
-                                                <option value="BULTO_5" data-unit="BULTO" data-factor="5.0">📦 Bulto (5 Millares)</option>
-                                                <option value="BULTO_3" data-unit="BULTO" data-factor="3.0">📦 Bulto (3 Millares)</option>
-                                                <option value="BULTO_1" data-unit="BULTO" data-factor="1.0">📦 Bulto (1 Millar)</option>
-                                                <option value="MILLAR_G" data-unit="MILLAR/G" data-factor="0.1">🛍️ 100 Bolsas (0.1 Millar/G)</option>
-                                                <option value="MILLAR_S" data-unit="MILLAR/S" data-factor="0.5">🛍️ 500 Bolsas (0.5 Millar/S)</option>
-                                                <option value="MILLAR_PAL" data-unit="MILLAR/PAL" data-factor="0.75">🛍️ 750 Bolsas (0.75 Millar/PAL)</option>
-                                                <option value="MILLAR_V" data-unit="MILLAR/V" data-factor="0.2">🌱 Bulto 1/2 KG (0.2 Millar/V)</option>
-                                                <option value="KG" data-unit="KG" data-factor="1.0">⚖️ Bobina / Venta por KG</option>
+                                                <option value="BOBINA_BULTO" data-unit="KG" data-factor="1.0" data-composite="1" {{ ($p->is_variable_quantity && $p->is_composite_rolls) ? 'selected' : '' }}>📦 Bulto Compuesto de Bobinas (Bambi)</option>
+                                                <option value="KG" data-unit="KG" data-factor="1.0" data-composite="0" {{ ($p->is_variable_quantity && !$p->is_composite_rolls) ? 'selected' : '' }}>⚖️ Bobina Suelta / Venta por KG</option>
+                                                <option value="MILLAR" data-unit="MILLAR" data-factor="1.0" data-composite="0">📦 Millar Estándar (1.0)</option>
+                                                <option value="BULTO_20" data-unit="BULTO" data-factor="20.0" data-composite="0">📦 Bulto (20 Millares)</option>
+                                                <option value="BULTO_15" data-unit="BULTO" data-factor="15.0" data-composite="0">📦 Bulto (15 Millares)</option>
+                                                <option value="BULTO_10" data-unit="BULTO" data-factor="10.0" data-composite="0">📦 Bulto (10 Millares)</option>
+                                                <option value="BULTO_5" data-unit="BULTO" data-factor="5.0" data-composite="0">📦 Bulto (5 Millares)</option>
+                                                <option value="BULTO_3" data-unit="BULTO" data-factor="3.0" data-composite="0">📦 Bulto (3 Millares)</option>
+                                                <option value="BULTO_1" data-unit="BULTO" data-factor="1.0" data-composite="0">📦 Bulto (1 Millar)</option>
+                                                <option value="MILLAR_G" data-unit="MILLAR/G" data-factor="0.1" data-composite="0">🛍️ 100 Bolsas (0.1 Millar/G)</option>
+                                                <option value="MILLAR_S" data-unit="MILLAR/S" data-factor="0.5" data-composite="0">🛍️ 500 Bolsas (0.5 Millar/S)</option>
+                                                <option value="MILLAR_PAL" data-unit="MILLAR/PAL" data-factor="0.75" data-composite="0">🛍️ 750 Bolsas (0.75 Millar/PAL)</option>
+                                                <option value="MILLAR_V" data-unit="MILLAR/V" data-factor="0.2" data-composite="0">🌱 Bulto 1/2 KG (0.2 Millar/V)</option>
                                             </select>
                                         </div>
                                         <div class="col-md-3">
@@ -1184,10 +1214,12 @@ function applyPresentationPreset(id, selectElem) {
 
     const unit = selectedOpt.getAttribute('data-unit');
     const factor = parseFloat(selectedOpt.getAttribute('data-factor')) || 1.0;
+    const isComposite = selectedOpt.getAttribute('data-composite') === '1';
 
     const unitInput = document.getElementById('unit_' + id);
     const millarInput = document.getElementById('millar_bulto_' + id);
     const isVarCheckbox = document.getElementById('is_variable_' + id);
+    const isCompCheckbox = document.getElementById('is_composite_' + id);
 
     if (unitInput) unitInput.value = unit;
     if (millarInput) millarInput.value = factor;
@@ -1197,6 +1229,10 @@ function applyPresentationPreset(id, selectElem) {
             isVarCheckbox.checked = true;
             toggleBobinaMode(id);
         }
+        if (isCompCheckbox) {
+            isCompCheckbox.checked = isComposite;
+            toggleCompositeMode(id);
+        }
     } else {
         if (isVarCheckbox && isVarCheckbox.checked) {
             isVarCheckbox.checked = false;
@@ -1205,6 +1241,15 @@ function applyPresentationPreset(id, selectElem) {
     }
 
     recalculateProductSimulation(id);
+}
+
+function toggleCompositeMode(id) {
+    const isCompElem = document.getElementById('is_composite_' + id);
+    const isComp = isCompElem ? isCompElem.checked : false;
+    const container = document.getElementById('suggested_rolls_container_' + id);
+    if (container) {
+        container.style.display = isComp ? 'block' : 'none';
+    }
 }
 
 function applyNewPresentationPreset(selectElem) {
@@ -1264,6 +1309,7 @@ function initPresentationPresets() {
 // ==================== TOGGLE MODO BOBINA / VENTA POR KILO ====================
 function toggleBobinaMode(id) {
     const isVar = document.getElementById('is_variable_' + id).checked;
+    const compBox = document.getElementById('composite_rolls_box_' + id);
     const dimContainer = document.getElementById('dim_container_' + id);
     const bobinaAlert = document.getElementById('bobina_alert_' + id);
     const unitSelect = document.getElementById('unit_' + id);
@@ -1272,6 +1318,7 @@ function toggleBobinaMode(id) {
     const fabricaUnitTag = document.getElementById('fabrica_unit_tag_' + id);
 
     if (isVar) {
+        if (compBox) compBox.style.display = 'block';
         if (dimContainer) dimContainer.style.display = 'none';
         if (bobinaAlert) bobinaAlert.style.display = 'block';
         if (unitSelect) unitSelect.value = 'KG';
@@ -1281,6 +1328,10 @@ function toggleBobinaMode(id) {
         if (targetUnitLabel) targetUnitLabel.innerText = 'BOBINA';
         if (fabricaUnitTag) fabricaUnitTag.innerText = '/ KG';
     } else {
+        if (compBox) compBox.style.display = 'none';
+        const isCompElem = document.getElementById('is_composite_' + id);
+        if (isCompElem) isCompElem.checked = false;
+        toggleCompositeMode(id);
         if (dimContainer) dimContainer.style.display = 'flex';
         if (bobinaAlert) bobinaAlert.style.display = 'none';
         if (millarBox) millarBox.style.display = 'block';

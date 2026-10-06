@@ -97,6 +97,26 @@
                                                 <option value="almacen" {{ $u->role === 'almacen' ? 'selected' : '' }}>📦 Almacén (Levantamiento y Recepción General)</option>
                                             </select>
                                         </div>
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label small text-white-50">Salario Semanal ($ USD)</label>
+                                                <input type="number" step="0.01" min="0" name="weekly_salary" class="form-control bg-secondary text-white border-0" value="{{ $u->weekly_salary ?? 90.00 }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label small text-white-50">Jornada Laboral</label>
+                                                <select name="work_days_per_week" class="form-select bg-secondary text-white border-0">
+                                                    <option value="5" {{ ($u->work_days_per_week ?? 6) == 5 ? 'selected' : '' }}>5 Días / Semana</option>
+                                                    <option value="6" {{ ($u->work_days_per_week ?? 6) == 6 ? 'selected' : '' }}>6 Días / Semana (Estándar)</option>
+                                                    <option value="7" {{ ($u->work_days_per_week ?? 6) == 7 ? 'selected' : '' }}>7 Días / Semana</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="checkbox" name="pay_partial_packages" value="1" id="payPartial{{ $u->id }}" {{ !empty($u->pay_partial_packages) ? 'checked' : '' }}>
+                                            <label class="form-check-label small text-white-50" for="payPartial{{ $u->id }}">
+                                                Pagar fracciones sueltas inmediatamente (sin retener)
+                                            </label>
+                                        </div>
                                         <div class="mb-3">
                                             <label class="form-label small text-white-50">Nueva Contraseña (Opcional)</label>
                                             <input type="password" name="password" class="form-control bg-secondary text-white border-0" placeholder="Dejar en blanco para mantener la actual">
@@ -146,6 +166,26 @@
                             <option value="operario">👷 Operario (App Móvil)</option>
                             <option value="almacen">📦 Almacén (Levantamiento General)</option>
                         </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-white-50">Salario Semanal ($ USD)</label>
+                            <input type="number" step="0.01" min="0" name="weekly_salary" class="form-control bg-secondary text-white border-0" value="90.00">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small text-white-50">Jornada Laboral</label>
+                            <select name="work_days_per_week" class="form-select bg-secondary text-white border-0">
+                                <option value="5">5 Días / Semana</option>
+                                <option value="6" selected>6 Días / Semana (Estándar)</option>
+                                <option value="7">7 Días / Semana</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="pay_partial_packages" value="1" id="payPartialCreate">
+                        <label class="form-check-label small text-white-50" for="payPartialCreate">
+                            Pagar fracciones sueltas inmediatamente (sin retener)
+                        </label>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small text-white-50">Contraseña</label>

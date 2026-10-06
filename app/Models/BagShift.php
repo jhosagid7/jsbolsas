@@ -38,6 +38,27 @@ class BagShift extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Resolve effective operator for the shift.
+     * Prioritizes the operator associated with productions if shift was opened by admin or general user.
+     */
+    public function getEffectiveUserAttribute(): ?User
+    {
+        if ($this->relationLoaded('productions') && $this->productions->isNotEmpty()) {
+            $firstUser = $this->productions->first()->user;
+            if ($firstUser) {
+                return $firstUser;
+            }
+        } elseif ($this->productions()->exists()) {
+            $firstUser = $this->productions()->with('user')->first()?->user;
+            if ($firstUser) {
+                return $firstUser;
+            }
+        }
+
+        return $this->user;
+    }
+
     public function machine(): BelongsTo
     {
         return $this->belongsTo(BagMachine::class, 'machine_id');
@@ -46,6 +67,77 @@ class BagShift extends Model
     public function productions(): HasMany
     {
         return $this->hasMany(BagProduction::class, 'bag_shift_id');
+    }
+
+    /**
+     * Duration in decimal hours (e.g. 8.5).
+     */
+    public function getDurationHoursAttribute(): float
+    {
+        $start = $this->start_time;
+        if (!$start) return 0.0;
+        $end = $this->end_time ?: now();
+        return round(max(0, $start->diffInMinutes($end)) / 60.0, 2);
+    }
+
+    /**
+     * Human-readable duration (e.g. 8h 30m or 4h 15m (En curso)).
+     */
+    public function getDurationHumanAttribute(): string
+    {
+        $start = $this->start_time;
+        if (!$start) return '0h 00m';
+        $end = $this->end_time ?: now();
+        $totalMinutes = max(0, (int)$start->diffInMinutes($end));
+        $hours = intdiv($totalMinutes, 60);
+        $minutes = $totalMinutes % 60;
+        $str = sprintf('%dh %02dm', $hours, $minutes);
+
+        return $this->status === 'open' ? "{$str} (En curso)" : $str;
+    }
+
+    /**
+     * Human-readable formatted start time.
+     */
+    public function getStartTimeHumanAttribute(): string
+    {
+        return $this->start_time ? $this->start_time->format('h:i A') : '--:--';
+    }
+
+    /**
+     * Human-readable formatted end time.
+     */
+    public function getEndTimeHumanAttribute(): string
+    {
+        return $this->end_time ? $this->end_time->format('h:i A') : ($this->status === 'open' ? 'En Vivo' : '--:--');
+    }
+
+    /**
+     * Proportional combined progress across multi-product sizes.
+     * e.g. 50% Size A + 50% Size B = 100% Target Met.
+     */
+    public function getCombinedProgressPercentAttribute(): float
+    {
+        $prodGroups = $this->productions->groupBy('product_id');
+        if ($prodGroups->isEmpty()) return 0.0;
+
+        $accumulatedFraction = 0.0;
+        foreach ($prodGroups as $prodId => $items) {
+            $product = $items->first()->product;
+            if (!$product) continue;
+            $target = (float)($product->target_units_per_shift ?: 5);
+            $qty = (float)$items->sum('quantity');
+            if ($target > 0) {
+                $accumulatedFraction += ($qty / $target);
+            }
+        }
+
+        return round($accumulatedFraction * 100.0, 1);
+    }
+
+    public function getIsTargetMetAttribute(): bool
+    {
+        return $this->combined_progress_percent >= 100.0;
     }
 
     /**
@@ -69,6 +161,9 @@ class BagShift extends Model
         $income = 0.0;
         $rawCost = 0.0;
         $targetUnits = 0.0;
+        $totalQty = 0.0;
+        $totalWeight = 0.0;
+        $seenProductIds = [];
 
         foreach ($this->productions as $p) {
             $prod = $p->product;
@@ -76,7 +171,13 @@ class BagShift extends Model
 
             $qty = (float)$p->quantity;
             $weight = (float)$p->weight;
-            $targetUnits += (float)($prod->target_units_per_shift ?: 5);
+            $totalQty += $qty;
+            $totalWeight += $weight;
+
+            if (!in_array($prod->id, $seenProductIds)) {
+                $targetUnits += (float)($prod->target_units_per_shift ?: 5);
+                $seenProductIds[] = $prod->id;
+            }
 
             $unitPrice = (float)($prod->price > 0 ? $prod->price : $prod->simulateFactoryPriceFromDailyTarget());
             if ($prod->is_variable_quantity) {
@@ -92,6 +193,8 @@ class BagShift extends Model
         $netProfit = $income - $totalCost;
         $margin = $income > 0 ? round(($netProfit / $income) * 100, 2) : 0.0;
 
+        $this->total_packages = $totalQty > 0 ? $totalQty : (float)$this->total_packages;
+        $this->total_weight = $totalWeight > 0 ? $totalWeight : (float)$this->total_weight;
         $this->total_income = $income;
         $this->total_production_cost = $totalCost;
         $this->fixed_operational_cost = $fixedCost;

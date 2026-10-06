@@ -156,6 +156,7 @@ class BagFactoryApiController extends Controller
             'productions'               => 'required|array|min:1',
             'productions.*.sync_id'     => 'required|string|max:64',
             'productions.*.product_id'  => 'required|exists:bag_products,id',
+            'productions.*.machine_id'  => 'nullable|exists:bag_machines,id',
             'productions.*.quantity'    => 'required|numeric|min:0.0001',
             'productions.*.weight'      => 'required|numeric|min:0.0001',
             'productions.*.recorded_at' => 'required|date',
@@ -191,21 +192,119 @@ class BagFactoryApiController extends Controller
 
         DB::beginTransaction();
         try {
+            $user = \App\Models\User::find($userId);
+
             foreach ($request->productions as $item) {
+                $machineId = !empty($item['machine_id']) ? $item['machine_id'] : $shift->machine_id;
+                $product = BagProduct::find($item['product_id']);
+
+                $qty = (float)$item['quantity'];
+                $weight = (float)$item['weight'];
+
+                // Auto-sanitización si el peso fue ingresado en gramos desde báscula de mesa (ej. 12030 g -> 12.03 Kg)
+                if ($weight >= 500 && $product && ($weight / 1000) <= ($qty * ($product->unit_weight_kg ?: 5.0) * 10)) {
+                    $weight = round($weight / 1000, 4);
+                }
+
+                $breakdown = $product ? $product->calculateBreakdown($qty) : [
+                    'completed_packages'   => $qty,
+                    'fractional_units'     => 0.0,
+                    'is_package_completed' => true,
+                ];
+                $completedCount = (float)$breakdown['completed_packages'];
+                $fractionalUnits = (float)$breakdown['fractional_units'];
+                $isCompleted = (bool)$breakdown['is_package_completed'];
+
+                $grading = $product ? $product->calculateWeightQualityGrade($weight, $completedCount, $fractionalUnits) : [
+                    'grade'             => 'B',
+                    'deviation_percent' => 0.0,
+                ];
+                $grade = $grading['grade'];
+                $devPercent = $grading['deviation_percent'];
+
+                $laborEarned = 0.00;
+                $laborRetained = 0.00;
+
+                if ($user && $product) {
+                    $tariffs = $user->calculateLaborTariff($product);
+                    $packageTariff = (float)$tariffs['package_tariff'];
+                    $fractionTariff = (float)$tariffs['fraction_tariff'];
+
+                    if ($user->pay_partial_packages) {
+                        $laborEarned = round(($completedCount * $packageTariff) + ($fractionalUnits * $fractionTariff), 2);
+                        $laborRetained = 0.00;
+                    } else {
+                        $earnedForCompleted = round($completedCount * $packageTariff, 2);
+                        $retainedForFraction = round($fractionalUnits * $fractionTariff, 2);
+                        $laborEarned = round($earnedForCompleted + $retainedForFraction, 2);
+                        $laborRetained = $retainedForFraction;
+                    }
+                }
+
+                $snapshot = [
+                    'product_name'            => $product?->name,
+                    'sku'                     => $product?->sku,
+                    'unit_weight_kg'          => (float)($product?->unit_weight_kg ?? 0),
+                    'millar_per_bulto'        => (float)($product?->millar_per_bulto ?? 1),
+                    'target_units_per_shift'  => (int)($product?->target_units_per_shift ?? 5),
+                    'cost_per_kg_snapshot'    => $product ? (float)$product->getEffectivePricePerKg() : 0.0,
+                    'factory_price_snapshot'  => (float)($product?->price ?? 0),
+                    'applied_daily_salary'    => $user ? (float)$user->daily_salary : 0.0,
+                    'applied_package_tariff'  => isset($packageTariff) ? $packageTariff : 0.0,
+                    'applied_fraction_tariff' => isset($fractionTariff) ? $fractionTariff : 0.0,
+                ];
+
+                $rawMeta = $item['metadata'] ?? null;
+                if (is_array($rawMeta) && isset($rawMeta[0])) {
+                    // Sequential list of rolls: preserve exact structure
+                    $itemMeta = $rawMeta;
+                } elseif (is_array($rawMeta)) {
+                    $itemMeta = $rawMeta;
+                    $itemMeta['snapshot'] = $snapshot;
+                } else {
+                    $itemMeta = $rawMeta;
+                }
+
                 $prod = BagProduction::updateOrCreate(
                     ['sync_id' => $item['sync_id']],
                     [
-                        'bag_shift_id' => $shift->id,
-                        'user_id'      => $userId,
-                        'product_id'   => $item['product_id'],
-                        'quantity'     => $item['quantity'],
-                        'weight'       => $item['weight'],
-                        'recorded_at'  => Carbon::parse($item['recorded_at']),
-                        'status'       => $item['status'] ?? 'pending_review',
-                        'metadata'     => $item['metadata'] ?? null,
+                        'bag_shift_id'             => $shift->id,
+                        'user_id'                  => $userId,
+                        'product_id'               => $item['product_id'],
+                        'machine_id'               => $machineId,
+                        'quantity'                 => $qty,
+                        'weight'                   => $weight,
+                        'weight_quality_grade'     => $grade,
+                        'weight_deviation_percent' => $devPercent,
+                        'completed_packages_count' => $completedCount,
+                        'fractional_units'         => $fractionalUnits,
+                        'is_package_completed'     => $isCompleted,
+                        'labor_earned_amount'      => $laborEarned,
+                        'labor_retained_amount'    => $laborRetained,
+                        'recorded_at'              => Carbon::parse($item['recorded_at']),
+                        'status'                   => $item['status'] ?? 'pending_review',
+                        'metadata'                 => $itemMeta,
                     ]
                 );
+
+                // Collaborative fraction completion: check for pending fraction of same product
+                $openFraction = BagProduction::where('product_id', $item['product_id'])
+                    ->where('is_package_completed', false)
+                    ->where('labor_retained_amount', '>', 0)
+                    ->where('id', '!=', $prod->id)
+                    ->orderBy('id', 'asc')
+                    ->first();
+
+                if ($openFraction && ($completedCount > 0 || $fractionalUnits > 0)) {
+                    $openFraction->completeFractionWith($prod);
+                }
+
                 $syncedIds[] = $prod->id;
+            }
+
+            // If shift was opened under admin/superadmin, reassign shift owner to the actual working operator
+            if ($shift->user_id !== $userId && ($shift->user?->role === 'superadmin' || $shift->user?->role === 'admin')) {
+                $shift->user_id = $userId;
             }
 
             // Recalculate shift totals
@@ -421,10 +520,19 @@ class BagFactoryApiController extends Controller
     {
         $prod = BagProduction::with(['product', 'user', 'shift.user'])->findOrFail($id);
 
-        if ($prod->product && !$prod->product->is_variable_quantity && $prod->quantity > 1) {
+        if ($prod->quantity > 1 && !$prod->product?->is_composite_rolls) {
             $totalQty = (int)$prod->quantity;
             $totalWeight = (float)$prod->weight;
-            $weightPerUnit = round($totalWeight / $totalQty, 2);
+            $rolls = [];
+
+            if (!empty($prod->metadata)) {
+                if (is_array($prod->metadata) && isset($prod->metadata['rolls']) && is_array($prod->metadata['rolls'])) {
+                    $rolls = $prod->metadata['rolls'];
+                } elseif (is_array($prod->metadata) && isset($prod->metadata[0]['weight'])) {
+                    $rolls = $prod->metadata;
+                }
+            }
+
             $createdIds = [];
 
             DB::beginTransaction();
@@ -432,12 +540,16 @@ class BagFactoryApiController extends Controller
                 for ($i = 0; $i < $totalQty; $i++) {
                     $newProd = $prod->replicate();
                     $newProd->quantity = 1.0;
-                    $newProd->weight = $weightPerUnit;
+                    $rollWeight = isset($rolls[$i]['weight']) && (float)$rolls[$i]['weight'] > 0
+                        ? (float)$rolls[$i]['weight']
+                        : round($totalWeight / $totalQty, 2);
+                    $newProd->weight = $rollWeight;
                     $newProd->qr_code = 'PKG-' . strtoupper(Str::random(10));
                     $newProd->status = 'approved';
                     $newProd->reviewed_at = now();
                     $newProd->reviewed_by = auth()->id();
                     $newProd->sync_id = 'PROD-SPLIT-' . Str::uuid();
+                    $newProd->metadata = isset($rolls[$i]) ? ['roll' => $rolls[$i]] : null;
                     $newProd->save();
                     $createdIds[] = $newProd->id;
                 }
@@ -448,7 +560,7 @@ class BagFactoryApiController extends Controller
 
                 return response()->json([
                     'success'       => true,
-                    'message'       => "Lote dividido y aprobado en {$totalQty} bultos individuales",
+                    'message'       => "Lote dividido y aprobado en {$totalQty} unidades individuales",
                     'is_split'      => true,
                     'split_count'   => $totalQty,
                     'data'          => $firstCreated,
@@ -457,7 +569,7 @@ class BagFactoryApiController extends Controller
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => 'Error al dividir lote de bultos: ' . $e->getMessage(),
+                    'message' => 'Error al dividir lote de bultos/bobinas: ' . $e->getMessage(),
                 ], 500);
             }
         }
@@ -474,7 +586,7 @@ class BagFactoryApiController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Bulto aprobado para Pre-Levantamiento',
+            'message' => 'Unidad aprobada para Pre-Levantamiento',
             'data'    => $prod->fresh(['product', 'user', 'reviewer']),
         ]);
     }
@@ -494,19 +606,32 @@ class BagFactoryApiController extends Controller
             foreach ($request->production_ids as $id) {
                 $prod = BagProduction::with(['product'])->find($id);
                 if ($prod && $prod->status !== 'approved') {
-                    if ($prod->product && !$prod->product->is_variable_quantity && $prod->quantity > 1) {
+                    if ($prod->quantity > 1 && !$prod->product?->is_composite_rolls) {
                         $totalQty = (int)$prod->quantity;
                         $totalWeight = (float)$prod->weight;
-                        $weightPerUnit = round($totalWeight / $totalQty, 2);
+                        $rolls = [];
+
+                        if (!empty($prod->metadata)) {
+                            if (is_array($prod->metadata) && isset($prod->metadata['rolls']) && is_array($prod->metadata['rolls'])) {
+                                $rolls = $prod->metadata['rolls'];
+                            } elseif (is_array($prod->metadata) && isset($prod->metadata[0]['weight'])) {
+                                $rolls = $prod->metadata;
+                            }
+                        }
+
                         for ($i = 0; $i < $totalQty; $i++) {
                             $newProd = $prod->replicate();
                             $newProd->quantity = 1.0;
-                            $newProd->weight = $weightPerUnit;
+                            $rollWeight = isset($rolls[$i]['weight']) && (float)$rolls[$i]['weight'] > 0
+                                ? (float)$rolls[$i]['weight']
+                                : round($totalWeight / $totalQty, 2);
+                            $newProd->weight = $rollWeight;
                             $newProd->qr_code = 'PKG-' . strtoupper(Str::random(10));
                             $newProd->status = 'approved';
                             $newProd->reviewed_at = now();
                             $newProd->reviewed_by = auth()->id();
                             $newProd->sync_id = 'PROD-SPLIT-' . Str::uuid();
+                            $newProd->metadata = isset($rolls[$i]) ? ['roll' => $rolls[$i]] : null;
                             $newProd->save();
                             $count++;
                         }
@@ -527,7 +652,7 @@ class BagFactoryApiController extends Controller
 
         return response()->json([
             'success'        => true,
-            'message'        => "Se aprobaron {$count} bulto(s) exitosamente",
+            'message'        => "Se aprobaron {$count} unidad(es) exitosamente",
             'approved_count' => $count,
         ]);
     }
@@ -720,53 +845,112 @@ class BagFactoryApiController extends Controller
     /**
      * Confirm lifting of bultos into warehouse inventory.
      */
-     public function receiveLifting(Request $request)
-     {
-         $request->validate([
-             'production_ids'   => 'required|array|min:1',
-             'production_ids.*' => 'exists:bag_productions,id',
-             'notes'            => 'nullable|string',
-         ]);
+    public function receiveLifting(Request $request)
+    {
+        $request->validate([
+            'production_ids'   => 'nullable|array',
+            'production_ids.*' => 'exists:bag_productions,id',
+            'items'            => 'nullable|array',
+            'items.*.id'       => 'required_with:items|exists:bag_productions,id',
+            'items.*.weight'   => 'nullable|numeric|min:0.01',
+            'items.*.rolls'    => 'nullable|array',
+            'notes'            => 'nullable|string',
+        ]);
 
-         $userId = auth()->id();
+        $userId = auth()->id();
+        $ids = $request->input('production_ids', []);
+        if ($request->has('items') && is_array($request->items)) {
+            foreach ($request->items as $item) {
+                if (isset($item['id'])) {
+                    $ids[] = $item['id'];
+                }
+            }
+        }
+        $ids = array_unique($ids);
 
-         $bultos = BagProduction::whereIn('id', $request->production_ids)
-             ->where('status', 'approved')
-             ->whereNull('lifted_at')
-             ->with(['product', 'user'])
-             ->get();
+        if (empty($ids)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Debe enviar al menos un ID de producción a levantar',
+            ], 422);
+        }
 
-         if ($bultos->isEmpty()) {
-             return response()->json([
-                 'success' => false,
-                 'message' => 'No se encontraron bultos válidos en estado aprobado pendientes de levantar',
-             ], 422);
-         }
+        $bultos = BagProduction::whereIn('id', $ids)
+            ->where('status', 'approved')
+            ->whereNull('lifted_at')
+            ->with(['product', 'user'])
+            ->get();
 
-         DB::beginTransaction();
-         try {
-             foreach ($bultos as $bp) {
-                 $bp->update([
-                     'status'    => 'lifted',
-                     'lifted_by' => $userId,
-                     'lifted_at' => now(),
-                 ]);
-             }
+        if ($bultos->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se encontraron bultos válidos en estado aprobado pendientes de levantar',
+            ], 422);
+        }
 
-             DB::commit();
+        DB::beginTransaction();
+        try {
+            $itemsMap = [];
+            if ($request->has('items') && is_array($request->items)) {
+                foreach ($request->items as $item) {
+                    if (isset($item['id'])) {
+                        $itemsMap[$item['id']] = $item;
+                    }
+                }
+            }
 
-             return response()->json([
-                 'success'        => true,
-                 'message'        => "Se levantaron exitosamente {$bultos->count()} bulto(s)",
-                 'received_count' => $bultos->count(),
-             ]);
+            foreach ($bultos as $bp) {
+                if (isset($itemsMap[$bp->id])) {
+                    $itemData = $itemsMap[$bp->id];
+                    if (isset($itemData['rolls']) && is_array($itemData['rolls'])) {
+                        $cleanRolls = [];
+                        $sumW = 0;
+                        foreach ($itemData['rolls'] as $r) {
+                            $rw = (float)($r['weight'] ?? 0);
+                            if ($rw > 0) {
+                                $cleanRolls[] = [
+                                    'weight' => $rw,
+                                    'color'  => trim($r['color'] ?? ''),
+                                    'batch'  => trim($r['batch'] ?? ''),
+                                ];
+                                $sumW += $rw;
+                            }
+                        }
+                        if (!empty($cleanRolls)) {
+                            $bp->metadata = $cleanRolls;
+                            $bp->quantity = count($cleanRolls);
+                            $bp->weight = $sumW;
+                        }
+                    } elseif (isset($itemData['weight']) && (float)$itemData['weight'] > 0) {
+                        $bp->weight = (float)$itemData['weight'];
+                    }
+                }
 
-         } catch (\Exception $e) {
-             DB::rollBack();
-             return response()->json([
-                 'success' => false,
-                 'message' => 'Error al procesar el levantamiento: ' . $e->getMessage(),
-             ], 500);
-         }
-     }
+                $bp->status = 'lifted';
+                $bp->lifted_by = $userId;
+                $bp->lifted_at = now();
+                if ($request->filled('notes')) {
+                    $meta = $bp->metadata ?? [];
+                    $meta['lifting_notes'] = $request->notes;
+                    $bp->metadata = $meta;
+                }
+                $bp->save();
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success'        => true,
+                'message'        => "Se levantaron exitosamente {$bultos->count()} bulto(s)",
+                'received_count' => $bultos->count(),
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar el levantamiento: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

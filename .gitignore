@@ -79,3 +79,4 @@ INSTALLATION_GUIDE.md
 *.sql
 *.dump
 *.bak
+graphify-out/

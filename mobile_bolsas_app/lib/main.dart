@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -164,6 +163,10 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString('token', data['token'] ?? '');
         await prefs.setString('user_name', data['user']['name'] ?? 'Operador Bolsas');
         await prefs.setString('user_role', data['user']['role'] ?? 'operario');
+        await prefs.setDouble('daily_salary', (data['user']['daily_salary'] != null) ? double.tryParse(data['user']['daily_salary'].toString()) ?? 15.0 : 15.0);
+        await prefs.setDouble('weekly_salary', (data['user']['weekly_salary'] != null) ? double.tryParse(data['user']['weekly_salary'].toString()) ?? 90.0 : 90.0);
+        await prefs.setInt('work_days_per_week', data['user']['work_days_per_week'] ?? 6);
+        await prefs.setBool('pay_partial_packages', data['user']['pay_partial_packages'] ?? true);
         await prefs.setString('last_email', _emailController.text);
 
         if (mounted) {

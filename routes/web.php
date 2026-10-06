@@ -25,6 +25,9 @@ Route::get('/', function () {
 Route::get('/dashboard', [BagFactoryWebController::class, 'dashboard'])
     ->middleware(['auth'])
     ->name('dashboard');
+Route::get('/dashboard/live-data', [BagFactoryWebController::class, 'dashboardLiveData'])
+    ->middleware(['auth'])
+    ->name('dashboard.live_data');
 
 // Protected JSBolsas Pro Routes
 Route::middleware('auth')->group(function () {
@@ -84,13 +87,40 @@ Route::middleware('auth')->group(function () {
     // Máquinas y Líneas
     Route::get('/machines', [BagFactoryWebController::class, 'machinesIndex'])->name('machines.index');
     Route::get('/maquinas', [BagFactoryWebController::class, 'machinesIndex'])->name('machines.index_alias');
+    Route::get('/machines/{id}', [BagFactoryWebController::class, 'machinesShow'])->name('machines.show');
     Route::post('/machines', [BagFactoryWebController::class, 'machinesStore'])->name('machines.store');
     Route::delete('/machines/{id}', [BagFactoryWebController::class, 'machinesDestroy'])->name('machines.destroy');
+    Route::post('/machines/{id}/incidents', [BagFactoryWebController::class, 'machinesReportIncident'])->name('machines.incidents.store');
+    Route::put('/machines/{id}/incidents/{incidentId}/resolve', [BagFactoryWebController::class, 'machinesResolveIncident'])->name('machines.incidents.resolve');
 
     // Ticket térmico de pesaje y etiquetas
     Route::get('/ticket/{id}', [BagFactoryWebController::class, 'ticket'])->name('ticket');
+    Route::get('/ticket/{id}/pdf', [BagFactoryWebController::class, 'ticketPdf'])->name('ticket.pdf');
     Route::get('/ticket/shift/{shift_id}', [BagFactoryWebController::class, 'printShiftLabels'])->name('ticket.shift');
+    Route::get('/ticket/shift/{shift_id}/pdf', [BagFactoryWebController::class, 'printShiftLabelsPdf'])->name('ticket.shift.pdf');
     Route::get('/ticket/batch/print', [BagFactoryWebController::class, 'printBatchLabels'])->name('ticket.batch');
+    Route::get('/ticket/batch/pdf', [BagFactoryWebController::class, 'printBatchLabelsPdf'])->name('ticket.batch.pdf');
+
+    // Módulo Generador de Etiquetas & Auditoría Forense
+    Route::get('/etiquetas', [\App\Http\Controllers\LabelGeneratorController::class, 'index'])->name('labels.index');
+    Route::get('/labels', [\App\Http\Controllers\LabelGeneratorController::class, 'index'])->name('labels.index_en');
+    Route::post('/etiquetas/generate', [\App\Http\Controllers\LabelGeneratorController::class, 'generate'])->name('labels.generate');
+    Route::post('/etiquetas/confirm-print', [\App\Http\Controllers\LabelGeneratorController::class, 'confirmPrint'])->name('labels.confirm_print');
+    Route::get('/etiquetas/direct-pdf', [\App\Http\Controllers\LabelGeneratorController::class, 'directPdf'])->name('labels.pdf.direct');
+    Route::get('/auditoria-etiquetas', [BagFactoryWebController::class, 'labelAudits'])->name('bag-factory.label-audits');
+    Route::get('/labels/audits', [BagFactoryWebController::class, 'labelAudits'])->name('bag-factory.label-audits-en');
+
+    // Nómina y Rendimiento por Metas de Operarios
+    Route::get('/bag-factory/payroll', [BagFactoryWebController::class, 'payrollIndex'])->name('bag-factory.payroll');
+    Route::get('/nomina', [BagFactoryWebController::class, 'payrollIndex'])->name('bag_factory.payroll');
+
+    // Estación Web de Operarios (Carga Rápida & Pesaje por Lotes)
+    Route::get('/operario/estacion', [BagFactoryWebController::class, 'operatorStation'])->name('operator.station');
+    Route::post('/operario/produccion/batch', [BagFactoryWebController::class, 'operatorStoreBatch'])->name('operator.store_batch');
+    Route::put('/operario/produccion/batch/{id}', [BagFactoryWebController::class, 'operatorUpdateBatch'])->name('operator.update_batch');
+    Route::delete('/operario/produccion/batch/{id}', [BagFactoryWebController::class, 'operatorDestroyBatch'])->name('operator.destroy_batch');
+    Route::post('/operario/turno/abrir', [BagFactoryWebController::class, 'operatorOpenShift'])->name('operator.open_shift');
+    Route::post('/operario/turno/cerrar', [BagFactoryWebController::class, 'operatorCloseShift'])->name('operator.close_shift');
 });
 
 require __DIR__ . '/auth.php';

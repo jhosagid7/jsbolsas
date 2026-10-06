@@ -255,17 +255,28 @@
                     <td>
                         {{ $detail->product->name }}
                         @if($detail->product->is_variable_quantity && !empty($detail->metadata))
-                            <br>
-                            <small style="margin-left: 10px; color: #555;">Desglose de Rollos:</small>
-                            <ul style="list-style-type: none; margin: 0; padding-left: 15px; font-size: 9px; color: #555;">
-                                @foreach($detail->metadata as $idx => $item)
-                                    <li>
-                                        Rollo #{{ $idx + 1 }}: Peso: <b>{{ $item['weight'] }} Kg</b> 
-                                        @if(!empty($item['color'])) | Color: {{ $item['color'] }} @endif
-                                        @if(!empty($item['batch'])) | Lote: {{ $item['batch'] }} @endif
-                                    </li>
-                                @endforeach
-                            </ul>
+                            @php
+                                $detailRolls = isset($detail->metadata['rolls']) && is_array($detail->metadata['rolls'])
+                                    ? $detail->metadata['rolls']
+                                    : (isset($detail->metadata['roll']) && is_array($detail->metadata['roll'])
+                                        ? [$detail->metadata['roll']]
+                                        : (is_array($detail->metadata) ? $detail->metadata : []));
+                            @endphp
+                            @if(count($detailRolls) > 0)
+                                <br>
+                                <small style="margin-left: 10px; color: #555;">Desglose de Rollos:</small>
+                                <ul style="list-style-type: none; margin: 0; padding-left: 15px; font-size: 9px; color: #555;">
+                                    @foreach($detailRolls as $item)
+                                        @if(is_array($item))
+                                            <li>
+                                                Rollo #{{ $loop->iteration }}: Peso: <b>{{ $item['weight'] ?? 0 }} Kg</b> 
+                                                @if(!empty($item['color'])) | Color: {{ $item['color'] }} @endif
+                                                @if(!empty($item['batch'])) | Lote: {{ $item['batch'] }} @endif
+                                            </li>
+                                        @endif
+                                    @endforeach
+                                </ul>
+                            @endif
                         @endif
                     </td>
                     <td class="text-center">{{ number_format($detail->quantity, 2) }}</td>

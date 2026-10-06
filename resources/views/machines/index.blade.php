@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title', 'Máquinas y Líneas de Producción')
 
 @section('content')
@@ -20,6 +20,8 @@
                     <th>Nombre de la Máquina</th>
                     <th>Código</th>
                     <th>Tipo</th>
+                    <th>Turnos Realizados</th>
+                    <th>Novedades Calidad</th>
                     <th>Estado</th>
                     <th class="text-end">Acciones</th>
                 </tr>
@@ -27,15 +29,30 @@
             <tbody>
                 @foreach($machines as $m)
                     <tr>
-                        <td class="fw-bold text-white">{{ $m->name }}</td>
+                        <td class="fw-bold text-white">
+                            <a href="{{ route('machines.show', $m->id) }}" class="text-white text-decoration-none hover-primary">
+                                {{ $m->name }} <i class="bi bi-box-arrow-up-right small text-primary ms-1"></i>
+                            </a>
+                        </td>
                         <td><span class="badge bg-secondary">{{ $m->code }}</span></td>
                         <td><span class="badge bg-info text-dark">{{ strtoupper($m->type) }}</span></td>
+                        <td><span class="badge bg-dark border border-secondary">{{ $m->shifts_count ?? 0 }} turnos</span></td>
+                        <td>
+                            @if(($m->incidents_count ?? 0) > 0)
+                                <span class="badge bg-danger">{{ $m->incidents_count }} reportes</span>
+                            @else
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">Sin Novedades</span>
+                            @endif
+                        </td>
                         <td><span class="badge bg-success">Operativa</span></td>
                         <td class="text-end">
+                            <a href="{{ route('machines.show', $m->id) }}" class="btn btn-outline-primary btn-sm me-1" title="Ver Historial y Métricas">
+                                <i class="bi bi-graph-up me-1"></i> Historial
+                            </a>
                             <form action="{{ route('machines.destroy', $m->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar esta máquina?');">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Eliminar Máquina">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </form>

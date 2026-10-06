@@ -55,5 +55,32 @@
              ]
          );
          $seller->assignRole('Vendedor');
+
+         // Operarios Reales de Fábrica (JSBolsas Pro)
+         $operators = [
+             ['name' => 'Gabriel Marquez', 'email' => 'gabriel@plasticosmyf.com'],
+             ['name' => 'Ernesto',         'email' => 'ernesto@plasticosmyf.com'],
+             ['name' => 'Sahir',           'email' => 'sahir@plasticosmyf.com'],
+             ['name' => 'Victor',          'email' => 'victor@plasticosmyf.com'],
+             ['name' => 'Nestor',          'email' => 'nestor@plasticosmyf.com'],
+         ];
+
+         foreach ($operators as $op) {
+             $operatorUser = User::updateOrCreate(
+                 ['email' => $op['email']],
+                 [
+                     'name' => $op['name'],
+                     'password' => bcrypt('12345678'),
+                     'profile' => 'operario',
+                     'status' => 'Active',
+                     'weekly_salary' => 90.00,
+                     'work_days_per_week' => 6,
+                 ]
+             );
+             if (Role::where('name', 'operario')->orWhere('name', 'Operario')->exists()) {
+                 $roleName = Role::where('name', 'operario')->exists() ? 'operario' : 'Operario';
+                 $operatorUser->assignRole($roleName);
+             }
+         }
      }
  }

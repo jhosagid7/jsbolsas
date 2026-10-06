@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Actualización Requerida | JSPOS</title>
-    <link href="https://fonts.googleapis.com/css?family=Nunito:200,600" rel="stylesheet">
+    <title>Actualización Requerida | JSBolsas Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         body {
-            font-family: 'Nunito', sans-serif;
-            background-color: #f8f9fa;
-            color: #636b6f;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b132b;
+            color: #f1f5f9;
             height: 100vh;
             margin: 0;
             display: flex;
@@ -18,52 +19,69 @@
         }
         .container {
             text-align: center;
-            background: white;
+            background: #1c2541;
             padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            max-width: 500px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            max-width: 480px;
             width: 90%;
         }
         h1 {
-            color: #e74c3c;
-            font-size: 24px;
-            margin-bottom: 20px;
+            color: #ef4444;
+            font-size: 20px;
+            font-weight: 800;
+            margin-bottom: 12px;
         }
         p {
-            font-size: 16px;
-            margin-bottom: 30px;
-            line-height: 1.5;
+            font-size: 14px;
+            color: #94a3b8;
+            margin-bottom: 24px;
+            line-height: 1.6;
         }
         .btn {
-            background-color: #3498db;
+            background-color: #0284c7;
             color: white;
-            padding: 12px 25px;
-            border-radius: 5px;
+            padding: 12px 24px;
+            border-radius: 10px;
             text-decoration: none;
-            font-weight: bold;
-            transition: background-color 0.3s;
-            display: inline-block;
+            font-weight: 700;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
         .btn:hover {
-            background-color: #2980b9;
+            background-color: #0369a1;
+            transform: translateY(-1px);
         }
-        .icon {
-            font-size: 48px;
-            color: #e74c3c;
-            margin-bottom: 20px;
+        .icon-box {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 16px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">⚠️</div>
-        <h1>Actualización de Base de Datos Requerida</h1>
+        <div class="icon-box">
+            <i class="bi bi-database-fill-gear"></i>
+        </div>
+        <h1>Actualización de Base de Datos</h1>
         <p>
-            El sistema ha detectado cambios recientes que requieren actualizar la base de datos para continuar.
-            Esto es normal después de una actualización del sistema.
+            El sistema detectó cambios en la estructura de datos que requieren sincronización. Por favor recarga o ejecuta la actualización para continuar.
         </p>
-        <a href="/system/upgrade-db" class="btn">Actualizar Base de Datos Ahora</a>
+        <a href="javascript:location.reload()" class="btn">
+            <i class="bi bi-arrow-clockwise"></i> Recargar Página
+        </a>
     </div>
 </body>
 </html>

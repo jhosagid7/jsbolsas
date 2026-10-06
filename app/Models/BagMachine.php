@@ -27,8 +27,34 @@ class BagMachine extends Model
         return $this->hasMany(BagShift::class, 'machine_id');
     }
 
+    public function directProductions()
+    {
+        return $this->hasMany(BagProduction::class, 'machine_id');
+    }
+
     public function productions()
     {
         return $this->hasManyThrough(BagProduction::class, BagShift::class, 'machine_id', 'bag_shift_id');
+    }
+
+    public function incidents()
+    {
+        return $this->hasMany(BagMachineIncident::class, 'machine_id');
+    }
+
+    /**
+     * Query all productions associated directly or through shift.
+     */
+    public function allProductionsQuery()
+    {
+        return BagProduction::query()->where(function ($query) {
+            $query->where('bag_productions.machine_id', $this->id)
+                ->orWhere(function ($q) {
+                    $q->whereNull('bag_productions.machine_id')
+                      ->whereHas('shift', function ($sq) {
+                          $sq->where('machine_id', $this->id);
+                      });
+                });
+        });
     }
 }

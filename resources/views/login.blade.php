@@ -84,7 +84,7 @@
         </form>
 
         <div class="text-center text-white-50 small mt-4">
-            <a href="/JSBolsas.apk" class="btn btn-outline-info btn-sm w-100 mb-2 fw-bold"><i class="bi bi-android2 me-1"></i> 📱 Descargar APK para Android</a><br>Servidor VPS en la Nube • Cloud VPS 4
+            <a href="/JSBolsas.apk" class="btn btn-outline-info btn-sm w-100 mb-2 fw-bold"><i class="bi bi-android2 me-1"></i> 📱 Descargar APK para Android <span class="badge bg-info text-dark">{{ $systemVersion ?? 'v2.3.1' }}</span></a><br>Servidor VPS en la Nube • Cloud VPS 4
         </div>
     </div>
 </body>
