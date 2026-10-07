@@ -2232,24 +2232,29 @@ class BagFactoryWebController extends Controller
     public function operatorStoreBatch(Request $request)
     {
         $request->validate([
-            'product_id' => 'required|exists:bag_products,id',
-            'quantity'   => 'required|numeric|min:0.01',
-            'weight'     => 'required|numeric|min:0.01',
-            'machine_id' => 'nullable|exists:bag_machines,id',
-            'print_mode' => 'nullable|string|in:save_only,direct_print',
+            'product_id'  => 'required|exists:bag_products,id',
+            'quantity'    => 'required|numeric|min:0.01',
+            'weight'      => 'required|numeric|min:0.01',
+            'machine_id'  => 'nullable|exists:bag_machines,id',
+            'print_mode'  => 'nullable|string|in:save_only,direct_print',
+            'operator_id' => 'nullable|exists:users,id',
         ]);
 
         $user = Auth::user();
+        $targetUserId = (!$user->isOperator() && $request->filled('operator_id'))
+            ? (int)$request->operator_id
+            : $user->id;
+        $targetUser = User::find($targetUserId) ?: $user;
 
-        // Obtener o abrir turno activo
-        $shift = BagShift::where('user_id', $user->id)
+        // Obtener o abrir turno activo del usuario objetivo
+        $shift = BagShift::where('user_id', $targetUser->id)
             ->where('status', 'open')
             ->first();
 
         if (!$shift) {
             $machineId = $request->machine_id ?: BagMachine::where('is_active', true)->value('id');
             $shift = BagShift::create([
-                'user_id'    => $user->id,
+                'user_id'    => $targetUser->id,
                 'machine_id' => $machineId,
                 'shift_type' => 'diurno',
                 'start_time' => now(),
@@ -2277,12 +2282,12 @@ class BagFactoryWebController extends Controller
         $grade = $grading['grade'];
         $devPercent = $grading['deviation_percent'];
 
-        // Tarifa laboral y ganancia en USD
-        $tariffs = $user->calculateLaborTariff($product);
+        // Tarifa laboral y ganancia en USD usando targetUser
+        $tariffs = $targetUser->calculateLaborTariff($product);
         $packageTariff = (float)$tariffs['package_tariff'];
         $fractionTariff = (float)$tariffs['fraction_tariff'];
 
-        if ($user->pay_partial_packages) {
+        if ($targetUser->pay_partial_packages) {
             $laborEarned = round(($completedCount * $packageTariff) + ($fractionalUnits * $fractionTariff), 2);
             $laborRetained = 0.00;
         } else {
@@ -2300,7 +2305,7 @@ class BagFactoryWebController extends Controller
             'target_units_per_shift'  => (int)($product->target_units_per_shift ?? 5),
             'cost_per_kg_snapshot'    => (float)$product->getEffectivePricePerKg(),
             'factory_price_snapshot'  => (float)($product->price ?? 0),
-            'applied_daily_salary'    => (float)$user->daily_salary,
+            'applied_daily_salary'    => (float)$targetUser->daily_salary,
             'applied_package_tariff'  => $packageTariff,
             'applied_fraction_tariff' => $fractionTariff,
             'batch_entry_mode'        => 'multi_pack_scale',
@@ -2311,7 +2316,7 @@ class BagFactoryWebController extends Controller
 
         $production = BagProduction::create([
             'bag_shift_id'             => $shift->id,
-            'user_id'                  => $user->id,
+            'user_id'                  => $targetUser->id,
             'product_id'               => $product->id,
             'machine_id'               => $machineId,
             'quantity'                 => $qty,
@@ -2337,7 +2342,8 @@ class BagFactoryWebController extends Controller
             return redirect()->route('ticket', ['id' => $production->id, 'scope' => 'bulto', 'auto_print' => 1]);
         }
 
-        return redirect()->route('operator.station')->with('success', "Pesaje de {$qty} millares registrado correctamente ({$production->weight_grade_label})");
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
+        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje de {$qty} millares registrado correctamente ({$production->weight_grade_label})");
     }
 
     public function operatorUpdateBatch(Request $request, $id)
@@ -2398,7 +2404,8 @@ class BagFactoryWebController extends Controller
             ]);
         }
 
-        return redirect()->route('operator.station')->with('success', "Pesaje actualizado correctamente ({$prod->weight_grade_label})");
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $prod->user_id] : [];
+        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje actualizado correctamente ({$prod->weight_grade_label})");
     }
 
     public function operatorDestroyBatch(Request $request, $id)
@@ -2423,6 +2430,7 @@ class BagFactoryWebController extends Controller
         }
 
         $shift = $prod->shift;
+        $prodOwnerId = $prod->user_id;
         $qty = $prod->quantity;
         $prod->delete();
 
@@ -2435,26 +2443,32 @@ class BagFactoryWebController extends Controller
             ]);
         }
 
-        return redirect()->route('operator.station')->with('success', "Pesaje pre-cargado de {$qty} millares eliminado correctamente.");
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $prodOwnerId] : [];
+        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje pre-cargado de {$qty} millares eliminado correctamente.");
     }
 
     public function operatorOpenShift(Request $request)
     {
         $request->validate([
-            'machine_id' => 'required|exists:bag_machines,id',
-            'shift_type' => 'nullable|in:diurno,nocturno',
+            'machine_id'  => 'required|exists:bag_machines,id',
+            'shift_type'  => 'nullable|in:diurno,nocturno',
+            'operator_id' => 'nullable|exists:users,id',
         ]);
 
         $user = Auth::user();
+        $targetUserId = (!$user->isOperator() && $request->filled('operator_id'))
+            ? (int)$request->operator_id
+            : $user->id;
 
-        $existing = BagShift::where('user_id', $user->id)->where('status', 'open')->first();
+        $existing = BagShift::where('user_id', $targetUserId)->where('status', 'open')->first();
         if ($existing) {
             $existing->update(['machine_id' => $request->machine_id]);
-            return redirect()->route('operator.station')->with('info', 'Turno activo continuado en máquina seleccionada.');
+            $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
+            return redirect()->route('operator.station', $redirectParams)->with('info', 'Turno activo continuado en máquina seleccionada.');
         }
 
         BagShift::create([
-            'user_id'    => $user->id,
+            'user_id'    => $targetUserId,
             'machine_id' => $request->machine_id,
             'shift_type' => $request->shift_type ?: 'diurno',
             'start_time' => now(),
@@ -2462,20 +2476,36 @@ class BagFactoryWebController extends Controller
             'sync_id'    => 'SHIFT-WEB-' . Str::uuid(),
         ]);
 
-        return redirect()->route('operator.station')->with('success', 'Turno iniciado correctamente.');
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
+        return redirect()->route('operator.station', $redirectParams)->with('success', 'Turno iniciado correctamente.');
     }
 
     public function operatorCloseShift(Request $request)
     {
-        $shift = BagShift::where('id', $request->shift_id)
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
+        $request->validate([
+            'shift_id'    => 'required|exists:bag_shifts,id',
+            'operator_id' => 'nullable|exists:users,id',
+        ]);
+
+        $user = Auth::user();
+        $query = BagShift::where('id', $request->shift_id);
+
+        // Si es operario, solo puede cerrar su propio turno. Si es admin, puede cerrar el turno que supervisa.
+        if ($user->isOperator()) {
+            $query->where('user_id', $user->id);
+        }
+
+        $shift = $query->firstOrFail();
 
         $shift->update([
             'status'   => 'closed',
             'end_time' => now(),
         ]);
 
-        return redirect()->route('operator.station')->with('success', 'Turno cerrado con éxito.');
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id'))
+            ? ['operator_id' => $shift->user_id]
+            : [];
+
+        return redirect()->route('operator.station', $redirectParams)->with('success', 'Turno cerrado con éxito.');
     }
 }

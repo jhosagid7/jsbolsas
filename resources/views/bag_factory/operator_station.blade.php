@@ -38,6 +38,9 @@
                 <form action="{{ route('operator.close_shift') }}" method="POST" onsubmit="return confirm('¿Seguro que deseas cerrar tu turno de trabajo actual?');">
                     @csrf
                     <input type="hidden" name="shift_id" value="{{ $activeShift->id }}">
+                    @if(!$user->isOperator())
+                        <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
+                    @endif
                     <button type="submit" class="btn btn-outline-danger btn-sm fw-bold d-flex align-items-center gap-1">
                         <i class="bi bi-door-closed"></i> Cerrar Turno
                     </button>
@@ -151,6 +154,9 @@
 
             <form action="{{ route('operator.open_shift') }}" method="POST" class="mx-auto" style="max-width: 450px;">
                 @csrf
+                @if(!$user->isOperator())
+                    <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
+                @endif
                 <div class="mb-3 text-start">
                     <label class="form-label text-white fw-bold small">Máquina Asignada:</label>
                     <select name="machine_id" class="form-select form-select-lg bg-dark text-white border-secondary" required>
@@ -184,6 +190,9 @@
                 @csrf
                 <input type="hidden" name="machine_id" value="{{ $activeShift->machine_id }}">
                 <input type="hidden" name="print_mode" id="printModeInput" value="direct_print">
+                @if(!$user->isOperator())
+                    <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
+                @endif
 
                 <div class="row g-3">
                     {{-- Columna 1: Selección de Producto / Medida --}}

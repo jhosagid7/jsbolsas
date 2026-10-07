@@ -455,4 +455,23 @@ class OperatorWebProductionTest extends TestCase
         $responseDel->assertRedirect(route('operator.station'));
         $this->assertDatabaseMissing('bag_productions', ['id' => $production->id]);
     }
+
+    public function test_admin_can_close_supervised_operator_shift(): void
+    {
+        $shift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->machine->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('operator.close_shift'), [
+            'shift_id'    => $shift->id,
+            'operator_id' => $this->operator->id,
+        ]);
+
+        $response->assertRedirect(route('operator.station', ['operator_id' => $this->operator->id]));
+        $this->assertEquals('closed', $shift->fresh()->status);
+    }
 }
