@@ -376,12 +376,48 @@ class BagProduct extends Model
     }
 
     /**
-     * Nombre base del producto removiendo sufijos de empaque (ej. "1 MILLAR", "20 MILLARE")
+     * Retorna el nombre base del producto sin el sufijo de millares/bulto y con espacios normalizados
      */
     public function getBaseName(): string
     {
-        $cleaned = preg_replace('/\s*\(?\s*\d+\s*MIL+AR[A-Z]*\s*\)?/i', '', $this->name);
+        $cleaned = preg_replace('/\s*\(?\s*\d+\s*MIL+AR[A-Z]*\s*\)?/i', '', $this->name ?? '');
         return trim(preg_replace('/\s+/', ' ', $cleaned));
+    }
+
+    /**
+     * Determina si este registro específico representa la presentación unitaria en Millar
+     */
+    public function isMillarPresentation(): bool
+    {
+        if ($this->is_variable_quantity) {
+            return false;
+        }
+        if (preg_match('/(^|\s)1\s*MIL+AR/i', $this->name ?? '')) {
+            return true;
+        }
+        if ($this->sale_unit === 'MILLAR') {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Determina si este registro específico representa la presentación empaquetada en Bulto
+     */
+    public function isBultoPresentation(): bool
+    {
+        if ($this->is_variable_quantity) {
+            return false;
+        }
+        if (preg_match('/(\d+)\s*MIL+AR/i', $this->name ?? '', $matches)) {
+            if ((int)$matches[1] > 1) {
+                return true;
+            }
+        }
+        if ($this->sale_unit === 'BULTO' && !$this->isMillarPresentation()) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -389,7 +425,7 @@ class BagProduct extends Model
      */
     public function findSiblingMillarProduct(): ?BagProduct
     {
-        if ($this->sale_unit === 'MILLAR') {
+        if ($this->isMillarPresentation()) {
             return $this;
         }
 
@@ -398,10 +434,14 @@ class BagProduct extends Model
             return null;
         }
 
-        return static::where('id', '!=', $this->id)
-            ->where('sale_unit', 'MILLAR')
-            ->where('name', 'like', $base . '%')
-            ->first();
+        $candidates = static::where('id', '!=', $this->id)->get();
+        foreach ($candidates as $cand) {
+            if ($cand->getBaseName() === $base && $cand->isMillarPresentation()) {
+                return $cand;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -409,7 +449,7 @@ class BagProduct extends Model
      */
     public function findSiblingBultoProduct(): ?BagProduct
     {
-        if ($this->sale_unit === 'BULTO') {
+        if ($this->isBultoPresentation()) {
             return $this;
         }
 
@@ -418,10 +458,14 @@ class BagProduct extends Model
             return null;
         }
 
-        return static::where('id', '!=', $this->id)
-            ->where('sale_unit', 'BULTO')
-            ->where('name', 'like', $base . '%')
-            ->first();
+        $candidates = static::where('id', '!=', $this->id)->get();
+        foreach ($candidates as $cand) {
+            if ($cand->getBaseName() === $base && $cand->isBultoPresentation()) {
+                return $cand;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -429,7 +473,7 @@ class BagProduct extends Model
      */
     public function hasBultoPackaging(): bool
     {
-        if ($this->sale_unit === 'BULTO') {
+        if ($this->isBultoPresentation()) {
             return true;
         }
         $bulto = $this->findSiblingBultoProduct();
@@ -441,7 +485,7 @@ class BagProduct extends Model
      */
     public function hasMillarPackaging(): bool
     {
-        if ($this->sale_unit === 'MILLAR') {
+        if ($this->isMillarPresentation()) {
             return true;
         }
         $millar = $this->findSiblingMillarProduct();

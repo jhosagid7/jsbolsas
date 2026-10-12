@@ -1360,7 +1360,8 @@ class BagFactoryWebController extends Controller
 
         $siblingBulto = $product?->findSiblingBultoProduct();
         $bultoCapacity = (float)($siblingBulto ? $siblingBulto->getRealMillarPerBulto() : ($product ? $product->getRealMillarPerBulto() : 20));
-        $isPartialMillar = ($product?->sale_unit === 'MILLAR' && $prod->quantity < $bultoCapacity);
+        $isMillarProd = ($product?->isMillarPresentation() || $product?->sale_unit === 'MILLAR');
+        $isPartialMillar = ($isMillarProd && $prod->quantity < $bultoCapacity);
 
         $canKit = ($isComposite || ($hasBulto && $hasMillar && !$isPartialMillar));
         $canBulto = ($isComposite || ($hasBulto && !$isPartialMillar));
@@ -1408,7 +1409,8 @@ class BagFactoryWebController extends Controller
 
         $siblingBulto = $product?->findSiblingBultoProduct();
         $bultoCapacity = (float)($siblingBulto ? $siblingBulto->getRealMillarPerBulto() : ($product ? $product->getRealMillarPerBulto() : 20));
-        $isPartialMillar = ($product?->sale_unit === 'MILLAR' && $prod->quantity < $bultoCapacity);
+        $isMillarProd = ($product?->isMillarPresentation() || $product?->sale_unit === 'MILLAR');
+        $isPartialMillar = ($isMillarProd && $prod->quantity < $bultoCapacity);
 
         if (!$prod->is_printed) {
             $prod->update([
@@ -1548,8 +1550,10 @@ class BagFactoryWebController extends Controller
         $siblingBulto = $product?->findSiblingBultoProduct();
         $siblingMillar = $product?->findSiblingMillarProduct();
 
-        $bultoProduct = ($saleUnit === 'BULTO') ? $product : ($siblingBulto ?: $product);
-        $millarProduct = ($saleUnit === 'MILLAR') ? $product : ($siblingMillar ?: $product);
+        $isMillarProd = ($product?->isMillarPresentation() || $saleUnit === 'MILLAR');
+
+        $bultoProduct = $siblingBulto ?: ($product?->isBultoPresentation() ? $product : $product);
+        $millarProduct = $siblingMillar ?: ($isMillarProd ? $product : $product);
 
         $bultoCapacity = (float)($bultoProduct ? $bultoProduct->getRealMillarPerBulto() : $millarPerBulto);
         if ($bultoCapacity <= 1 && $siblingBulto) {
@@ -1722,7 +1726,7 @@ class BagFactoryWebController extends Controller
 
             // 1. Caso: Modo Bulto (Etiqueta Master Exterior)
             if ($scope === 'bulto' && $canDoBulto) {
-                $bultoCount = ($saleUnit === 'BULTO') ? $qty : max(1, (int)floor($qty / $bultoCapacity));
+                $bultoCount = $isMillarProd ? max(1, (int)floor($qty / $bultoCapacity)) : (($saleUnit === 'BULTO') ? $qty : max(1, (int)floor($qty / $bultoCapacity)));
                 for ($b = 0; $b < $bultoCount; $b++) {
                     $bultoQr = $bultoCount > 1 ? "{$baseQr}-B" . ($b + 1) : $baseQr;
                     $pres = $nameDescribesPackaging ? '' : ($bultoCapacity > 1 ? "1 BULTO (" . (int)$bultoCapacity . " MILLARES)" : "1 {$saleUnit}");
@@ -1748,7 +1752,7 @@ class BagFactoryWebController extends Controller
                 }
             } elseif ($scope === 'kit' && $canDoBulto && $bultoCapacity > 1) {
                 // 2. Caso: Kit Completo (Bulto Exterior + Millares Interiores)
-                $numBultos = ($saleUnit === 'BULTO') ? $qty : max(1, (int)floor($qty / $bultoCapacity));
+                $numBultos = $isMillarProd ? max(1, (int)floor($qty / $bultoCapacity)) : (($saleUnit === 'BULTO') ? $qty : max(1, (int)floor($qty / $bultoCapacity)));
                 $unitsPerBulto = (int)$bultoCapacity;
                 $totalLabels = $numBultos * ($unitsPerBulto + 1);
                 $currentIndex = 0;
@@ -1806,9 +1810,9 @@ class BagFactoryWebController extends Controller
                 }
             } else {
                 // 3. Caso: Modo Millar (o si no aplica kit/bulto)
-                // Si la unidad es MILLAR, $qty ya es el total de millares (ej. 5 millares -> 5 etiquetas)
-                // Si la unidad es BULTO, se desglosa en ($qty * $bultoCapacity)
-                $totalMillares = ($saleUnit === 'BULTO') ? ($qty * (int)$bultoCapacity) : $qty;
+                // Si el producto registrado es presentación de MILLAR, $qty ya es el total de millares (ej. 10 millares -> 10 etiquetas)
+                // Si la presentación registrada es BULTO, se desglosa en ($qty * $bultoCapacity)
+                $totalMillares = $isMillarProd ? $qty : (($saleUnit === 'BULTO') ? ($qty * (int)$bultoCapacity) : $qty);
                 $currentIndex = 0;
 
                 for ($m = 1; $m <= $totalMillares; $m++) {

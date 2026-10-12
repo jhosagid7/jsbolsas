@@ -441,13 +441,13 @@
         <div style="margin-bottom: 8px;">
             <span>Modo de Etiquetas: </span>
             @if(!empty($canKit))
-                <a href="?scope=kit" class="btn-size {{ ($scope ?? '') === 'kit' ? 'active' : '' }}" style="text-decoration:none;">📦 Kit Completo (Bulto + Desglose)</a>
+                <a href="?scope=kit" class="btn-size {{ ($scope ?? '') === 'kit' ? 'active' : '' }}" style="text-decoration:none;">📦 Kit Completo (Bulto Master + Desglose)</a>
             @endif
             @if(!empty($canBulto))
-                <a href="?scope=bulto" class="btn-size {{ ($scope ?? '') === 'bulto' ? 'active' : '' }}" style="text-decoration:none;">🏷️ Solo Bulto Master</a>
+                <a href="?scope=bulto" class="btn-size {{ ($scope ?? '') === 'bulto' ? 'active' : '' }}" style="text-decoration:none;">🏷️ Solo Bulto Master (Saco)</a>
             @endif
             @if(!empty($canMillar))
-                <a href="?scope=millar" class="btn-size {{ ($scope ?? '') === 'millar' ? 'active' : '' }}" style="text-decoration:none;">🔘 Solo Unidades / Bobinas</a>
+                <a href="?scope=millar" class="btn-size {{ ($scope ?? '') === 'millar' ? 'active' : '' }}" style="text-decoration:none;">🔘 Solo Unidades / Millares</a>
             @endif
         </div>
 

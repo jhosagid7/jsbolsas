@@ -403,6 +403,86 @@ class LabelHierarchyAndAuditTest extends TestCase
         // Al no completar un bulto, NO debe permitir Kit Completo ni Bulto Master
         $responsePartial->assertDontSee('📦 Kit Completo');
         $responsePartial->assertDontSee('🏷️ Solo Bulto Master');
-        $responsePartial->assertSee('🔘 Solo Unidades / Bobinas');
+        $responsePartial->assertSee('🔘 Solo Unidades / Millares');
+    }
+
+    /**
+     * Test 8: Bolsa de Hielo 15x45 con espacios dobles en el nombre y ambos productos con sale_unit='BULTO'.
+     * Valida que 10 millares registrados generen 11 etiquetas (1 Bulto Master + 10 Millares).
+     */
+    public function test_bolsa_hielo_15x45_with_sibling_double_spaces_and_bulto_sale_unit(): void
+    {
+        // Producto Bulto: ID 143 en VPS con doble espacio y 10 millares
+        $bulto15x45 = BagProduct::create([
+            'name'                 => 'BOLSA DE HIELO 15X45  C-4 10 MILLARES',
+            'sku'                  => 'B04H1545',
+            'sale_unit'            => 'BULTO',
+            'millar_per_bulto'     => 10.0000,
+            'cost'                 => 20.0,
+            'price'                => 25.0,
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        // Producto Millar: ID 144 en VPS con un solo espacio y 'sale_unit' = 'BULTO' pero nombre dice 1 MILLAR
+        $millar15x45 = BagProduct::create([
+            'name'                 => 'BOLSA DE HIELO 15X45 C-4 1 MILLAR',
+            'sku'                  => 'B04MH1545M',
+            'sale_unit'            => 'BULTO',
+            'millar_per_bulto'     => 1.0000,
+            'cost'                 => 2.0,
+            'price'                => 2.5,
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        // Operador carga 10 millares seleccionando el producto unitario
+        $prod10 = BagProduction::create([
+            'bag_shift_id' => $this->shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $millar15x45->id,
+            'quantity'     => 10, // 10 millares (completa 1 bulto)
+            'weight'       => 15.00,
+            'status'       => 'approved',
+            'reviewed_by'  => $this->supervisor->id,
+            'reviewed_at'  => now(),
+            'recorded_at'  => now(),
+            'qr_code'      => 'PKG-15X45-10M',
+        ]);
+
+        $controller = new \App\Http\Controllers\BagFactoryWebController();
+
+        // 1. Kit Completo: 11 etiquetas (1 Bulto Master + 10 Millares interiores)
+        $labelsKit = $controller->formatLabelsList($prod10, 'kit');
+        $this->assertCount(11, $labelsKit);
+        $this->assertEquals('BOLSA DE HIELO 15X45  C-4 10 MILLARES', $labelsKit[0]['product_name']);
+        $this->assertEquals('B04H1545', $labelsKit[0]['sku']);
+        $this->assertEquals('bulto', $labelsKit[0]['label_type']);
+
+        $this->assertEquals('BOLSA DE HIELO 15X45 C-4 1 MILLAR', $labelsKit[1]['product_name']);
+        $this->assertEquals('B04MH1545M', $labelsKit[1]['sku']);
+        $this->assertEquals('millar', $labelsKit[1]['label_type']);
+
+        // 2. Solo Unidades / Millares: 10 etiquetas
+        $labelsMillar = $controller->formatLabelsList($prod10, 'millar');
+        $this->assertCount(10, $labelsMillar);
+        $this->assertEquals('BOLSA DE HIELO 15X45 C-4 1 MILLAR', $labelsMillar[0]['product_name']);
+        $this->assertEquals('B04MH1545M', $labelsMillar[0]['sku']);
+
+        // 3. Solo Bulto Master: 1 etiqueta
+        $labelsBulto = $controller->formatLabelsList($prod10, 'bulto');
+        $this->assertCount(1, $labelsBulto);
+        $this->assertEquals('BOLSA DE HIELO 15X45  C-4 10 MILLARES', $labelsBulto[0]['product_name']);
+        $this->assertEquals('B04H1545', $labelsBulto[0]['sku']);
+
+        // 4. Verificación en interfaz web: Por defecto selecciona 'kit' para 10 millares y muestra los 3 botones
+        $response = $this->actingAs($this->supervisor)
+            ->get(route('ticket', ['id' => $prod10->id]));
+
+        $response->assertStatus(200);
+        $response->assertSee('Total de etiquetas físicas a imprimir: <strong>11</strong>', false);
+        $response->assertSee('📦 Kit Completo (Bulto Master + Desglose)');
+        $response->assertSee('🏷️ Solo Bulto Master (Saco)');
+        $response->assertSee('🔘 Solo Unidades / Millares');
     }
 }
