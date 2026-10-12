@@ -31,110 +31,169 @@
 
         .preview-controls {
             background: #ffffff;
-            max-width: 680px;
-            margin: 0 auto 16px auto;
-            padding: 14px 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+            max-width: 820px;
+            margin: 0 auto 20px auto;
+            padding: 20px 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.35);
             text-align: center;
         }
 
+        .preview-header {
+            margin-bottom: 16px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 12px;
+        }
+
         .preview-controls h3 {
-            margin: 0 0 4px 0;
-            font-size: 17px;
+            margin: 0 0 6px 0;
+            font-size: 19px;
             font-weight: 800;
             color: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .preview-controls p {
-            margin: 0 0 10px 0;
-            font-size: 12px;
+            margin: 0;
+            font-size: 13px;
             color: #64748b;
         }
 
-        .btn-size {
-            padding: 6px 12px;
-            margin: 0 3px;
-            border: 2px solid #0284c7;
-            background: #f0f9ff;
-            color: #0284c7;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .btn-size.active, .btn-size:hover {
-            background: #0284c7;
-            color: #ffffff;
-        }
-
-        .btn-actions {
-            margin-top: 10px;
+        .controls-group {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
             display: flex;
-            justify-content: center;
-            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
             flex-wrap: wrap;
         }
 
+        .controls-group-label {
+            font-size: 12px;
+            font-weight: 800;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .controls-group-options {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+            flex: 1;
+        }
+
+        .btn-size {
+            padding: 8px 14px;
+            border: 1.5px solid #0284c7;
+            background: #ffffff;
+            color: #0284c7;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .btn-size.active {
+            background: #0284c7;
+            color: #ffffff;
+            box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);
+        }
+
+        .btn-size:hover:not(.active) {
+            background: #e0f2fe;
+            border-color: #0369a1;
+            color: #0369a1;
+        }
+
+        .btn-actions {
+            margin-top: 16px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+
         .btn-print {
-            padding: 8px 16px;
+            padding: 10px 20px;
             background: #10b981;
             color: #ffffff;
             border: none;
-            border-radius: 6px;
-            font-weight: 900;
-            font-size: 12px;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 13px;
             cursor: pointer;
-            box-shadow: 0 3px 10px rgba(16, 185, 129, 0.35);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
             text-decoration: none;
+            transition: all 0.2s ease;
         }
 
         .btn-print:hover {
             background: #059669;
+            transform: translateY(-1px);
         }
 
         .btn-pdf {
-            padding: 8px 16px;
+            padding: 10px 18px;
             background: #0284c7;
             color: #ffffff;
             border: none;
-            border-radius: 6px;
-            font-weight: 900;
-            font-size: 12px;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 13px;
             cursor: pointer;
-            box-shadow: 0 3px 10px rgba(2, 132, 199, 0.35);
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
             text-decoration: none;
+            transition: all 0.2s ease;
         }
 
         .btn-pdf:hover {
             background: #0369a1;
+            transform: translateY(-1px);
         }
 
         .btn-back {
-            padding: 8px 14px;
+            padding: 10px 16px;
             background: #475569;
             color: #ffffff;
             border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13px;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
             text-decoration: none;
+            transition: all 0.2s ease;
         }
 
         .btn-back:hover {
             background: #334155;
+            transform: translateY(-1px);
         }
 
         /* ===================================================
@@ -431,38 +490,54 @@
 
     <!-- Panel de Previsualización y Selector de Formato de Papel -->
     <div class="preview-controls no-print">
-        <h3>🏷️ Módulo de Impresión de Etiquetas Térmicas (v2)</h3>
-        <p>Total de etiquetas físicas a imprimir: <strong>{{ count($labels) }}</strong> 
-            @if(isset($scope))
-                <span class="badge" style="background:#0284c7; color:#fff; font-size:11px; margin-left:5px; padding:2px 8px; border-radius:4px;">Modo: {{ strtoupper($scope) }}</span>
-            @endif
-        </p>
+        <div class="preview-header">
+            <h3>🏷️ Módulo de Impresión de Etiquetas Térmicas (v2)</h3>
+            <p>
+                Total de etiquetas físicas a imprimir: <strong>{{ count($labels) }}</strong>
+                @if(isset($scope))
+                    <span class="badge" style="background:#0284c7; color:#fff; font-size:12px; margin-left:6px; padding:3px 10px; border-radius:6px; font-weight:700;">
+                        MODO: {{ strtoupper($scope === 'kit' ? 'KIT COMPLETO' : ($scope === 'bulto' ? 'SOLO BULTO MASTER' : 'SOLO MILLARES')) }}
+                    </span>
+                @endif
+            </p>
+        </div>
         
-        <div style="margin-bottom: 8px;">
-            <span>Modo de Etiquetas: </span>
-            @if(!empty($canKit))
-                <a href="?scope=kit" class="btn-size {{ ($scope ?? '') === 'kit' ? 'active' : '' }}" style="text-decoration:none;">📦 Kit Completo (Bulto Master + Desglose)</a>
-            @endif
-            @if(!empty($canBulto))
-                <a href="?scope=bulto" class="btn-size {{ ($scope ?? '') === 'bulto' ? 'active' : '' }}" style="text-decoration:none;">🏷️ Solo Bulto Master (Saco)</a>
-            @endif
-            @if(!empty($canMillar))
-                <a href="?scope=millar" class="btn-size {{ ($scope ?? '') === 'millar' ? 'active' : '' }}" style="text-decoration:none;">🔘 Solo Unidades / Millares</a>
-            @endif
+        <!-- Fila 1: Selección de Modo de Empaque -->
+        <div class="controls-group">
+            <span class="controls-group-label">📦 Modo de Empaque:</span>
+            <div class="controls-group-options">
+                @if(!empty($canKit))
+                    <a href="?scope=kit" class="btn-size {{ ($scope ?? '') === 'kit' ? 'active' : '' }}">📦 Kit Completo (Bulto Master + Desglose)</a>
+                @endif
+                @if(!empty($canBulto))
+                    <a href="?scope=bulto" class="btn-size {{ ($scope ?? '') === 'bulto' ? 'active' : '' }}">🏷️ Solo Bulto Master (Saco)</a>
+                @endif
+                @if(!empty($canMillar))
+                    <a href="?scope=millar" class="btn-size {{ ($scope ?? '') === 'millar' ? 'active' : '' }}">🔘 Solo Unidades / Millares</a>
+                @endif
+            </div>
         </div>
 
-        <div>
-            <span>Formato de Papel: </span>
-            <button type="button" class="btn-size active" id="btn-80mm" onclick="changePaperSize('80mm')">Rollo 80mm (Grande / Zebra)</button>
-            <button type="button" class="btn-size" id="btn-58mm" onclick="changePaperSize('58mm')">Rollo 58mm (Portátil / Mini)</button>
+        <!-- Fila 2: Formato de Papel Térmico -->
+        <div class="controls-group">
+            <span class="controls-group-label">🖨️ Ancho de Papel:</span>
+            <div class="controls-group-options">
+                <button type="button" class="btn-size active" id="btn-80mm" onclick="changePaperSize('80mm')">
+                    <span>📄</span> Rollo 80mm (Estándar / Industrial)
+                </button>
+                <button type="button" class="btn-size" id="btn-58mm" onclick="changePaperSize('58mm')">
+                    <span>🧾</span> Rollo 58mm (Portátil / Mini)
+                </button>
+            </div>
         </div>
 
+        <!-- Botones de Acción -->
         <div class="btn-actions">
             <button type="button" class="btn-print" onclick="triggerPrint()">
-                🖨️ MANDAR A IMPRIMIR
+                🖨️ Mandar a Imprimir
             </button>
             <button type="button" class="btn-pdf" onclick="downloadPdf()">
-                📄 DESCARGAR PDF
+                📄 Descargar PDF
             </button>
             <a href="{{ route('labels.index') }}" class="btn-back">
                 🏷️ Generador
