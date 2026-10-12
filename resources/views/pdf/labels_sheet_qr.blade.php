@@ -129,7 +129,6 @@
                                     <td class="info-col">
                                         <p>Operador: <strong>{{ $label['operator_name'] }}</strong></p>
                                         <p>Fecha: <strong>{{ $label['production_date'] }}</strong></p>
-                                        <p>Aprobó: <strong>{{ $label['approver_name'] }}</strong></p>
                                         @if($label['is_variable'])
                                             <p>Peso Real: <strong>{{ number_format($label['weight_kg'], 2) }} Kg</strong></p>
                                         @endif

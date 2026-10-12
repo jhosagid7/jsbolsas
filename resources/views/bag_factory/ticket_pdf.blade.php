@@ -122,7 +122,6 @@
                         <td class="ticket-info">
                             <p><span class="info-label">OPERADOR:</span> <strong>{{ $label['operator_name'] }}</strong></p>
                             <p><span class="info-label">FECHA:</span> <strong>{{ $label['production_date'] }}</strong></p>
-                            <p><span class="info-label">APROBÓ:</span> <strong>{{ $label['approver_name'] }}</strong></p>
                             @if($label['is_variable'])
                                 <p><span class="info-label">PESO:</span> <strong>{{ number_format($label['weight_kg'], 2) }} Kg</strong></p>
                             @endif

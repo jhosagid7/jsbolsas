@@ -504,7 +504,6 @@
                         <td class="ticket-info-td">
                             <div class="info-row"><span class="info-label">OPERADOR:</span> <span class="info-val">{{ $label['operator_name'] }}</span></div>
                             <div class="info-row"><span class="info-label">FECHA:</span> <span class="info-val">{{ $label['production_date'] }}</span></div>
-                            <div class="info-row"><span class="info-label">APROBÓ:</span> <span class="info-val">{{ $label['approver_name'] }}</span></div>
 
                             {{-- OCULTACIÓN SELECTIVA: Sólo se muestra Peso Real si es Bobina de Peso Variable --}}
                             @if($label['is_variable'])

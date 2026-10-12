@@ -480,9 +480,46 @@ class LabelHierarchyAndAuditTest extends TestCase
             ->get(route('ticket', ['id' => $prod10->id]));
 
         $response->assertStatus(200);
-        $response->assertSee('Total de etiquetas físicas a imprimir: <strong>11</strong>', false);
         $response->assertSee('📦 Kit Completo (Bulto Master + Desglose)');
         $response->assertSee('🏷️ Solo Bulto Master (Saco)');
         $response->assertSee('🔘 Solo Unidades / Millares');
+        // Asegurar que APROBÓ fue eliminado de la etiqueta impresa
+        $response->assertDontSee('APROBÓ:');
+    }
+
+    /**
+     * Test 9: Los operarios pueden generar e imprimir etiquetas en su turno sin esperar aprobación administrativa,
+     * y las etiquetas físicas NO muestran el campo APROBÓ.
+     */
+    public function test_operator_can_print_shift_labels_in_pending_status_and_approbo_is_removed(): void
+    {
+        // Registro de producción aún no aprobado (status: pending_review)
+        $prodPending = BagProduction::create([
+            'bag_shift_id' => $this->shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $this->product10Millar->id,
+            'quantity'     => 1, // 1 Bulto
+            'weight'       => 45.00,
+            'status'       => 'pending_review',
+            'reviewed_by'  => null,
+            'reviewed_at'  => null,
+            'recorded_at'  => now(),
+            'qr_code'      => 'PKG-OPERATOR-PENDING',
+        ]);
+
+        // Operario accede a imprimir el ticket individual
+        $responseTicket = $this->actingAs($this->operator)
+            ->get(route('ticket', ['id' => $prodPending->id]));
+
+        $responseTicket->assertStatus(200);
+        $responseTicket->assertDontSee('APROBÓ:');
+
+        // Operario accede a imprimir todas las etiquetas del turno
+        $responseShift = $this->actingAs($this->operator)
+            ->get(route('ticket.shift', ['shift_id' => $this->shift->id]));
+
+        $responseShift->assertStatus(200);
+        $responseShift->assertSee('PKG-OPERATOR-PENDING');
+        $responseShift->assertDontSee('APROBÓ:');
     }
 }

@@ -1447,7 +1447,7 @@ class BagFactoryWebController extends Controller
     public function printShiftLabels($shift_id, Request $request)
     {
         $productions = BagProduction::where('bag_shift_id', $shift_id)
-            ->where('status', 'approved')
+            ->whereIn('status', ['approved', 'pending_review'])
             ->with(['user', 'product', 'shift.user', 'reviewer'])
             ->orderBy('recorded_at', 'asc')
             ->get();
@@ -1466,7 +1466,7 @@ class BagFactoryWebController extends Controller
     public function printShiftLabelsPdf($shift_id, Request $request)
     {
         $productions = BagProduction::where('bag_shift_id', $shift_id)
-            ->where('status', 'approved')
+            ->whereIn('status', ['approved', 'pending_review'])
             ->with(['user', 'product', 'shift.user', 'reviewer'])
             ->orderBy('recorded_at', 'asc')
             ->get();
