@@ -374,4 +374,99 @@ class BagProduct extends Model
             'actual_weight'      => round($actualWeight, 4),
         ];
     }
+
+    /**
+     * Nombre base del producto removiendo sufijos de empaque (ej. "1 MILLAR", "20 MILLARE")
+     */
+    public function getBaseName(): string
+    {
+        $cleaned = preg_replace('/\s*\(?\s*\d+\s*MIL+AR[A-Z]*\s*\)?/i', '', $this->name);
+        return trim(preg_replace('/\s+/', ' ', $cleaned));
+    }
+
+    /**
+     * Localiza el producto hermano vendido por Millar
+     */
+    public function findSiblingMillarProduct(): ?BagProduct
+    {
+        if ($this->sale_unit === 'MILLAR') {
+            return $this;
+        }
+
+        $base = $this->getBaseName();
+        if (strlen($base) < 3) {
+            return null;
+        }
+
+        return static::where('id', '!=', $this->id)
+            ->where('sale_unit', 'MILLAR')
+            ->where('name', 'like', $base . '%')
+            ->first();
+    }
+
+    /**
+     * Localiza el producto hermano vendido por Bulto
+     */
+    public function findSiblingBultoProduct(): ?BagProduct
+    {
+        if ($this->sale_unit === 'BULTO') {
+            return $this;
+        }
+
+        $base = $this->getBaseName();
+        if (strlen($base) < 3) {
+            return null;
+        }
+
+        return static::where('id', '!=', $this->id)
+            ->where('sale_unit', 'BULTO')
+            ->where('name', 'like', $base . '%')
+            ->first();
+    }
+
+    /**
+     * Determina si el producto tiene presentación o empaque en Bulto
+     */
+    public function hasBultoPackaging(): bool
+    {
+        if ($this->sale_unit === 'BULTO') {
+            return true;
+        }
+        $bulto = $this->findSiblingBultoProduct();
+        return $bulto !== null && $bulto->id !== $this->id;
+    }
+
+    /**
+     * Determina si el producto tiene presentación o venta en Millar
+     */
+    public function hasMillarPackaging(): bool
+    {
+        if ($this->sale_unit === 'MILLAR') {
+            return true;
+        }
+        $millar = $this->findSiblingMillarProduct();
+        return $millar !== null && $millar->id !== $this->id;
+    }
+
+    /**
+     * Capacidad de millares por bulto real sanitizada
+     * Prioriza la cantidad explícita en el nombre del producto (ej. "20 MILLARE", "3 MILLARES")
+     * e ignora valores desfasados de BD (ej. 1000).
+     */
+    public function getRealMillarPerBulto(): float
+    {
+        if (preg_match('/(\d+)\s*MIL+AR/i', $this->name ?? '', $matches)) {
+            $extracted = (float)$matches[1];
+            if ($extracted > 0 && $extracted < 100) {
+                return $extracted;
+            }
+        }
+
+        $m = (float)($this->millar_per_bulto ?? 1);
+        if ($m >= 100 || $m <= 0) {
+            return 1.0;
+        }
+
+        return $m;
+    }
 }

@@ -440,9 +440,15 @@
         
         <div style="margin-bottom: 8px;">
             <span>Modo de Etiquetas: </span>
-            <a href="?scope=kit" class="btn-size {{ ($scope ?? '') === 'kit' ? 'active' : '' }}" style="text-decoration:none;">📦 Kit Completo (Bulto + Desglose)</a>
-            <a href="?scope=bulto" class="btn-size {{ ($scope ?? '') === 'bulto' ? 'active' : '' }}" style="text-decoration:none;">🏷️ Solo Bulto Master</a>
-            <a href="?scope=millar" class="btn-size {{ ($scope ?? '') === 'millar' ? 'active' : '' }}" style="text-decoration:none;">🔘 Solo Unidades / Bobinas</a>
+            @if(!empty($canKit))
+                <a href="?scope=kit" class="btn-size {{ ($scope ?? '') === 'kit' ? 'active' : '' }}" style="text-decoration:none;">📦 Kit Completo (Bulto + Desglose)</a>
+            @endif
+            @if(!empty($canBulto))
+                <a href="?scope=bulto" class="btn-size {{ ($scope ?? '') === 'bulto' ? 'active' : '' }}" style="text-decoration:none;">🏷️ Solo Bulto Master</a>
+            @endif
+            @if(!empty($canMillar))
+                <a href="?scope=millar" class="btn-size {{ ($scope ?? '') === 'millar' ? 'active' : '' }}" style="text-decoration:none;">🔘 Solo Unidades / Bobinas</a>
+            @endif
         </div>
 
         <div>
@@ -486,7 +492,9 @@
                 <!-- Encabezado de la Etiqueta -->
                 <div class="ticket-header">
                     <div class="product-title">{{ $label['product_name'] }}</div>
-                    <span class="ticket-presentation">{{ $label['presentation_info'] }}</span>
+                    @if(!empty($label['presentation_info']))
+                        <span class="ticket-presentation">{{ $label['presentation_info'] }}</span>
+                    @endif
                 </div>
 
                 <!-- Cuerpo de Datos y Código QR con Tabla Fija -->

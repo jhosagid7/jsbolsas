@@ -90,9 +90,10 @@ class LabelGeneratorController extends Controller
                 if ($product) {
                     $isVariable = (bool)$product->is_variable_quantity;
                     $saleUnit = strtoupper($product->sale_unit ?? 'BULTO');
-                    $millarPerBulto = (float)($product->millar_per_bulto > 0 ? $product->millar_per_bulto : 1.0);
+                    $millarPerBulto = (float)$product->getRealMillarPerBulto();
                     $prodName = mb_strtoupper($product->name, 'UTF-8');
                     $sku = $product->sku ?? 'S/SKU';
+                    $nameDescribesPackaging = (bool)preg_match('/(millar|milar|und|bobina|paquete|fardo)/i', $prodName);
 
                     if ($isVariable) {
                         $isComposite = (bool)$product->is_composite_rolls;
@@ -208,13 +209,16 @@ class LabelGeneratorController extends Controller
                             }
                         }
                     } elseif ($scope === 'bulto') {
+                        $siblingBulto = $product->findSiblingBultoProduct();
+                        $effectiveName = ($product->hasMillarPackaging() && $siblingBulto) ? mb_strtoupper($siblingBulto->name, 'UTF-8') : $prodName;
+                        $effectiveSku = ($product->hasMillarPackaging() && $siblingBulto) ? ($siblingBulto->sku ?? $sku) : $sku;
                         for ($b = 0; $b < $qty; $b++) {
-                            $pres = $millarPerBulto > 1 ? "1 BULTO (" . (int)$millarPerBulto . " MILLARES)" : "1 {$saleUnit}";
+                            $pres = $nameDescribesPackaging ? '' : ($millarPerBulto > 1 ? "1 BULTO (" . (int)$millarPerBulto . " MILLARES)" : "1 {$saleUnit}");
                             $labels[] = [
                                 'id'                => $product->id,
                                 'index'             => $b + 1,
                                 'total_in_batch'    => $qty,
-                                'product_name'      => $prodName,
+                                'product_name'      => $effectiveName,
                                 'presentation_info' => $pres,
                                 'operator_name'     => $catalogOperatorName,
                                 'production_date'   => $productionDate,
@@ -223,11 +227,27 @@ class LabelGeneratorController extends Controller
                                 'weight_kg'         => 0.0,
                                 'batch_code'        => $batchCode,
                                 'qr_code'           => $product->sku ? 'PKG-' . $product->sku . '-B' . ($b + 1) . '-' . strtoupper(Str::random(4)) : ('PKG-B-' . strtoupper(Str::random(8))),
-                                'sku'               => $sku,
+                                'sku'               => $effectiveSku,
                                 'label_type'        => 'bulto',
                             ];
                         }
                     } elseif ($scope === 'kit') {
+                        $siblingMillar = $product->findSiblingMillarProduct();
+                        $siblingBulto = $product->findSiblingBultoProduct();
+
+                        $bultoName = $prodName;
+                        $bultoSku = $sku;
+                        $millarName = $prodName;
+                        $millarSku = $sku;
+
+                        if ($product->hasBultoPackaging() && $siblingMillar) {
+                            $millarName = mb_strtoupper($siblingMillar->name, 'UTF-8');
+                            $millarSku = $siblingMillar->sku ?? $sku;
+                        } elseif ($product->hasMillarPackaging() && $siblingBulto) {
+                            $bultoName = mb_strtoupper($siblingBulto->name, 'UTF-8');
+                            $bultoSku = $siblingBulto->sku ?? $sku;
+                        }
+
                         $currentIndex = 0;
                         $totalLabels = $qty * ($millarPerBulto > 1 ? ((int)$millarPerBulto + 1) : 1);
 
@@ -239,8 +259,8 @@ class LabelGeneratorController extends Controller
                                     'id'                => $product->id,
                                     'index'             => $currentIndex,
                                     'total_in_batch'    => $totalLabels,
-                                    'product_name'      => $prodName,
-                                    'presentation_info' => "1 BULTO (" . (int)$millarPerBulto . " MILLARES)",
+                                    'product_name'      => $bultoName,
+                                    'presentation_info' => $nameDescribesPackaging ? '' : ("1 BULTO (" . (int)$millarPerBulto . " MILLARES)"),
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -248,7 +268,7 @@ class LabelGeneratorController extends Controller
                                     'weight_kg'         => 0.0,
                                     'batch_code'        => $batchCode,
                                     'qr_code'           => $bultoQr,
-                                    'sku'               => $sku,
+                                    'sku'               => $bultoSku,
                                     'label_type'        => 'bulto',
                                 ];
 
@@ -258,8 +278,8 @@ class LabelGeneratorController extends Controller
                                         'id'                => $product->id,
                                         'index'             => $currentIndex,
                                         'total_in_batch'    => $totalLabels,
-                                        'product_name'      => $prodName,
-                                        'presentation_info' => "1 MILLAR",
+                                        'product_name'      => $millarName,
+                                        'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
                                         'operator_name'     => $catalogOperatorName,
                                         'production_date'   => $productionDate,
                                         'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -267,7 +287,7 @@ class LabelGeneratorController extends Controller
                                         'weight_kg'         => 0.0,
                                         'batch_code'        => $batchCode,
                                         'qr_code'           => "{$bultoQr}-M{$m}",
-                                        'sku'               => $sku,
+                                        'sku'               => $millarSku,
                                         'label_type'        => 'millar',
                                     ];
                                 }
@@ -277,8 +297,8 @@ class LabelGeneratorController extends Controller
                                     'id'                => $product->id,
                                     'index'             => $currentIndex,
                                     'total_in_batch'    => $totalLabels,
-                                    'product_name'      => $prodName,
-                                    'presentation_info' => "1 MILLAR",
+                                    'product_name'      => $millarName,
+                                    'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -286,13 +306,17 @@ class LabelGeneratorController extends Controller
                                     'weight_kg'         => 0.0,
                                     'batch_code'        => $batchCode,
                                     'qr_code'           => $bultoQr,
-                                    'sku'               => $sku,
+                                    'sku'               => $millarSku,
                                     'label_type'        => 'millar',
                                 ];
                             }
                         }
                     } else {
                         // Modo Millar por Defecto
+                        $siblingMillar = $product->findSiblingMillarProduct();
+                        $effectiveName = ($product->hasBultoPackaging() && $siblingMillar) ? mb_strtoupper($siblingMillar->name, 'UTF-8') : $prodName;
+                        $effectiveSku = ($product->hasBultoPackaging() && $siblingMillar) ? ($siblingMillar->sku ?? $sku) : $sku;
+
                         $millarCount = ($millarPerBulto > 1) ? (int)$millarPerBulto : 1;
                         $totalMillares = $qty * $millarCount;
                         $currentIndex = 0;
@@ -305,8 +329,8 @@ class LabelGeneratorController extends Controller
                                     'id'                => $product->id,
                                     'index'             => $currentIndex,
                                     'total_in_batch'    => $totalMillares,
-                                    'product_name'      => $prodName,
-                                    'presentation_info' => "1 MILLAR",
+                                    'product_name'      => $effectiveName,
+                                    'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -314,7 +338,7 @@ class LabelGeneratorController extends Controller
                                     'weight_kg'         => 0.0,
                                     'batch_code'        => $batchCode,
                                     'qr_code'           => $qr,
-                                    'sku'               => $sku,
+                                    'sku'               => $effectiveSku,
                                     'label_type'        => 'millar',
                                 ];
                             }
@@ -440,9 +464,10 @@ class LabelGeneratorController extends Controller
                 if ($product) {
                     $isVariable = (bool)$product->is_variable_quantity;
                     $saleUnit = strtoupper($product->sale_unit ?? 'BULTO');
-                    $millarPerBulto = (float)($product->millar_per_bulto > 0 ? $product->millar_per_bulto : 1.0);
+                    $millarPerBulto = (float)$product->getRealMillarPerBulto();
                     $prodName = mb_strtoupper($product->name, 'UTF-8');
                     $sku = $product->sku ?? 'S/SKU';
+                    $nameDescribesPackaging = (bool)preg_match('/(millar|milar|und|bobina|paquete|fardo)/i', $prodName);
 
                     if ($isVariable) {
                         $isComposite = (bool)$product->is_composite_rolls;
@@ -558,13 +583,16 @@ class LabelGeneratorController extends Controller
                             }
                         }
                     } elseif ($scope === 'bulto') {
+                        $siblingBulto = $product->findSiblingBultoProduct();
+                        $effectiveName = ($product->hasMillarPackaging() && $siblingBulto) ? mb_strtoupper($siblingBulto->name, 'UTF-8') : $prodName;
+                        $effectiveSku = ($product->hasMillarPackaging() && $siblingBulto) ? ($siblingBulto->sku ?? $sku) : $sku;
                         for ($b = 0; $b < $qty; $b++) {
-                            $pres = $millarPerBulto > 1 ? "1 BULTO (" . (int)$millarPerBulto . " MILLARES)" : "1 {$saleUnit}";
+                            $pres = $nameDescribesPackaging ? '' : ($millarPerBulto > 1 ? "1 BULTO (" . (int)$millarPerBulto . " MILLARES)" : "1 {$saleUnit}");
                             $labels[] = [
                                 'id'                => $product->id,
                                 'index'             => $b + 1,
                                 'total_in_batch'    => $qty,
-                                'product_name'      => $prodName,
+                                'product_name'      => $effectiveName,
                                 'presentation_info' => $pres,
                                 'operator_name'     => $catalogOperatorName,
                                 'production_date'   => $productionDate,
@@ -573,11 +601,27 @@ class LabelGeneratorController extends Controller
                                 'weight_kg'         => 0.0,
                                 'batch_code'        => $batchCode,
                                 'qr_code'           => $product->sku ? 'PKG-' . $product->sku . '-B' . ($b + 1) . '-' . strtoupper(Str::random(4)) : ('PKG-B-' . strtoupper(Str::random(8))),
-                                'sku'               => $sku,
+                                'sku'               => $effectiveSku,
                                 'label_type'        => 'bulto',
                             ];
                         }
                     } elseif ($scope === 'kit') {
+                        $siblingMillar = $product->findSiblingMillarProduct();
+                        $siblingBulto = $product->findSiblingBultoProduct();
+
+                        $bultoName = $prodName;
+                        $bultoSku = $sku;
+                        $millarName = $prodName;
+                        $millarSku = $sku;
+
+                        if ($product->hasBultoPackaging() && $siblingMillar) {
+                            $millarName = mb_strtoupper($siblingMillar->name, 'UTF-8');
+                            $millarSku = $siblingMillar->sku ?? $sku;
+                        } elseif ($product->hasMillarPackaging() && $siblingBulto) {
+                            $bultoName = mb_strtoupper($siblingBulto->name, 'UTF-8');
+                            $bultoSku = $siblingBulto->sku ?? $sku;
+                        }
+
                         $currentIndex = 0;
                         $totalLabels = $qty * ($millarPerBulto > 1 ? ((int)$millarPerBulto + 1) : 1);
 
@@ -589,8 +633,8 @@ class LabelGeneratorController extends Controller
                                     'id'                => $product->id,
                                     'index'             => $currentIndex,
                                     'total_in_batch'    => $totalLabels,
-                                    'product_name'      => $prodName,
-                                    'presentation_info' => "1 BULTO (" . (int)$millarPerBulto . " MILLARES)",
+                                    'product_name'      => $bultoName,
+                                    'presentation_info' => $nameDescribesPackaging ? '' : ("1 BULTO (" . (int)$millarPerBulto . " MILLARES)"),
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -598,7 +642,7 @@ class LabelGeneratorController extends Controller
                                     'weight_kg'         => 0.0,
                                     'batch_code'        => $batchCode,
                                     'qr_code'           => $bultoQr,
-                                    'sku'               => $sku,
+                                    'sku'               => $bultoSku,
                                     'label_type'        => 'bulto',
                                 ];
 
@@ -608,8 +652,8 @@ class LabelGeneratorController extends Controller
                                         'id'                => $product->id,
                                         'index'             => $currentIndex,
                                         'total_in_batch'    => $totalLabels,
-                                        'product_name'      => $prodName,
-                                        'presentation_info' => "1 MILLAR",
+                                        'product_name'      => $millarName,
+                                        'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
                                         'operator_name'     => $catalogOperatorName,
                                         'production_date'   => $productionDate,
                                         'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -617,7 +661,7 @@ class LabelGeneratorController extends Controller
                                         'weight_kg'         => 0.0,
                                         'batch_code'        => $batchCode,
                                         'qr_code'           => "{$bultoQr}-M{$m}",
-                                        'sku'               => $sku,
+                                        'sku'               => $millarSku,
                                         'label_type'        => 'millar',
                                     ];
                                 }
@@ -627,8 +671,8 @@ class LabelGeneratorController extends Controller
                                     'id'                => $product->id,
                                     'index'             => $currentIndex,
                                     'total_in_batch'    => $totalLabels,
-                                    'product_name'      => $prodName,
-                                    'presentation_info' => "1 MILLAR",
+                                    'product_name'      => $millarName,
+                                    'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -636,13 +680,17 @@ class LabelGeneratorController extends Controller
                                     'weight_kg'         => 0.0,
                                     'batch_code'        => $batchCode,
                                     'qr_code'           => $bultoQr,
-                                    'sku'               => $sku,
+                                    'sku'               => $millarSku,
                                     'label_type'        => 'millar',
                                 ];
                             }
                         }
                     } else {
                         // Modo Millar por Defecto
+                        $siblingMillar = $product->findSiblingMillarProduct();
+                        $effectiveName = ($product->hasBultoPackaging() && $siblingMillar) ? mb_strtoupper($siblingMillar->name, 'UTF-8') : $prodName;
+                        $effectiveSku = ($product->hasBultoPackaging() && $siblingMillar) ? ($siblingMillar->sku ?? $sku) : $sku;
+
                         $millarCount = ($millarPerBulto > 1) ? (int)$millarPerBulto : 1;
                         $totalMillares = $qty * $millarCount;
                         $currentIndex = 0;
@@ -655,8 +703,8 @@ class LabelGeneratorController extends Controller
                                     'id'                => $product->id,
                                     'index'             => $currentIndex,
                                     'total_in_batch'    => $totalMillares,
-                                    'product_name'      => $prodName,
-                                    'presentation_info' => "1 MILLAR",
+                                    'product_name'      => $effectiveName,
+                                    'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
@@ -664,7 +712,7 @@ class LabelGeneratorController extends Controller
                                     'weight_kg'         => 0.0,
                                     'batch_code'        => $batchCode,
                                     'qr_code'           => $qr,
-                                    'sku'               => $sku,
+                                    'sku'               => $effectiveSku,
                                     'label_type'        => 'millar',
                                 ];
                             }

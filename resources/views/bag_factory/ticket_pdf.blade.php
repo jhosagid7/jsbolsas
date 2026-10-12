@@ -112,7 +112,9 @@
             <div class="ticket-container">
                 <div class="ticket-header">
                     {{ $label['product_name'] }}
-                    <span class="ticket-presentation">{{ $label['presentation_info'] }}</span>
+                    @if(!empty($label['presentation_info']))
+                        <span class="ticket-presentation">{{ $label['presentation_info'] }}</span>
+                    @endif
                 </div>
 
                 <table class="ticket-table">

@@ -303,4 +303,106 @@ class LabelHierarchyAndAuditTest extends TestCase
         $response->assertSee('PKG-CONSISTENT-01');
         $response->assertSee('PKG-ANOMALY-01');
     }
+
+    /**
+     * Test 7: Validación de productos hermanos (Bulto 20 Millares vs Millar 1 Millar),
+     * eliminación del subtítulo redundante '1000 MILLARES', asignación de SKU correspondiente
+     * y manejo de producciones parciales.
+     */
+    public function test_sibling_products_and_no_redundant_packaging_subtitle_in_kit_and_partial(): void
+    {
+        $bultoProduct = BagProduct::create([
+            'name'                 => 'BOLSA ALTA FUELLE 1KG 19X27  20 MILLARE',
+            'sku'                  => 'B04A1927CFA',
+            'sale_unit'            => 'BULTO',
+            'millar_per_bulto'     => 1000.0000, // Valor crudo de BD
+            'cost'                 => 100.0,
+            'price'                => 120.0,
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        $millarProduct = BagProduct::create([
+            'name'                 => 'BOLSA ALTA FUELLE 1KG 19X27  1 MILLAR',
+            'sku'                  => 'B04A1927CFM',
+            'sale_unit'            => 'MILLAR',
+            'millar_per_bulto'     => 1.0000,
+            'cost'                 => 5.0,
+            'price'                => 6.0,
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        // 1. Verificar resolución bidireccional de hermanos
+        $this->assertEquals($millarProduct->id, $bultoProduct->findSiblingMillarProduct()?->id);
+        $this->assertEquals($bultoProduct->id, $millarProduct->findSiblingBultoProduct()?->id);
+
+        // 2. Verificar sanitización de capacidad real (detecta 20 millares del nombre en lugar de 1000)
+        $this->assertEquals(20.0, $bultoProduct->getRealMillarPerBulto());
+
+        // 3. Producción completa en modo Kit
+        $prodFull = BagProduction::create([
+            'bag_shift_id' => $this->shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $bultoProduct->id,
+            'quantity'     => 1, // 1 Bulto = 20 Millares
+            'weight'       => 20.00,
+            'status'       => 'approved',
+            'reviewed_by'  => $this->supervisor->id,
+            'reviewed_at'  => now(),
+            'recorded_at'  => now(),
+            'qr_code'      => 'PKG-BULTO-FULL-01',
+        ]);
+
+        $controller = new \App\Http\Controllers\BagFactoryWebController();
+        $labels = $controller->formatLabelsList($prodFull, 'kit');
+
+        // Total 21 etiquetas: 1 Bulto Master + 20 Millares interiores
+        $this->assertCount(21, $labels);
+
+        // Primera etiqueta: Es el Bulto Master con nombre y SKU del BULTO
+        $this->assertEquals('BOLSA ALTA FUELLE 1KG 19X27  20 MILLARE', $labels[0]['product_name']);
+        $this->assertEquals('B04A1927CFA', $labels[0]['sku']);
+        $this->assertEquals('', $labels[0]['presentation_info']); // Subtítulo redundante suprimido
+        $this->assertEquals('bulto', $labels[0]['label_type']);
+
+        // Segunda etiqueta en adelante: Son los desgloses con nombre y SKU del MILLAR
+        $this->assertEquals('BOLSA ALTA FUELLE 1KG 19X27  1 MILLAR', $labels[1]['product_name']);
+        $this->assertEquals('B04A1927CFM', $labels[1]['sku']);
+        $this->assertEquals('', $labels[1]['presentation_info']); // Subtítulo redundante suprimido
+        $this->assertEquals('millar', $labels[1]['label_type']);
+
+        // Comprobar la respuesta web: NO debe tener '1000 MILLARES' ni '1 BULTO ('
+        $response = $this->actingAs($this->supervisor)
+            ->get(route('ticket', ['id' => $prodFull->id, 'scope' => 'kit']));
+
+        $response->assertStatus(200);
+        $response->assertDontSee('1000 MILLARES');
+        $response->assertDontSee('1 BULTO (1000 MILLARES)');
+
+        // 4. Producción parcial: El operador solo fabricó 5 millares (menor que el bulto completo)
+        $prodPartial = BagProduction::create([
+            'bag_shift_id' => $this->shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $millarProduct->id,
+            'quantity'     => 5, // 5 millares parciales
+            'weight'       => 5.00,
+            'status'       => 'approved',
+            'reviewed_by'  => $this->supervisor->id,
+            'reviewed_at'  => now(),
+            'recorded_at'  => now(),
+            'qr_code'      => 'PKG-PARTIAL-05',
+        ]);
+
+        $responsePartial = $this->actingAs($this->supervisor)
+            ->get(route('ticket', ['id' => $prodPartial->id]));
+
+        $responsePartial->assertStatus(200);
+        // Debe seleccionar por defecto el modo millar para 5 millares
+        $responsePartial->assertSee('Total de etiquetas físicas a imprimir: <strong>5</strong>', false);
+        // Al no completar un bulto, NO debe permitir Kit Completo ni Bulto Master
+        $responsePartial->assertDontSee('📦 Kit Completo');
+        $responsePartial->assertDontSee('🏷️ Solo Bulto Master');
+        $responsePartial->assertSee('🔘 Solo Unidades / Bobinas');
+    }
 }

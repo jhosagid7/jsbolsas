@@ -1351,9 +1351,20 @@ class BagFactoryWebController extends Controller
     public function ticket($id, Request $request)
     {
         $prod = BagProduction::with(['user', 'product', 'shift.user', 'reviewer'])->findOrFail($id);
-        $isVariable = (bool)($prod->product?->is_variable_quantity);
-        $isComposite = $isVariable && (bool)($prod->product?->is_composite_rolls);
-        $defaultScope = $isComposite ? 'kit' : 'millar';
+        $product = $prod->product;
+        $isVariable = (bool)($product?->is_variable_quantity);
+        $isComposite = $isVariable && (bool)($product?->is_composite_rolls);
+
+        $hasBulto = $product ? $product->hasBultoPackaging() : false;
+        $hasMillar = $product ? $product->hasMillarPackaging() : true;
+
+        $siblingBulto = $product?->findSiblingBultoProduct();
+        $bultoCapacity = (float)($siblingBulto ? $siblingBulto->getRealMillarPerBulto() : ($product ? $product->getRealMillarPerBulto() : 20));
+        $isPartialMillar = ($product?->sale_unit === 'MILLAR' && $prod->quantity < $bultoCapacity);
+
+        $canKit = ($isComposite || ($hasBulto && $hasMillar && !$isPartialMillar));
+        $canBulto = ($isComposite || ($hasBulto && !$isPartialMillar));
+        $canMillar = (!$isComposite || true);
 
         if (!$prod->is_printed) {
             $prod->update([
@@ -1362,18 +1373,42 @@ class BagFactoryWebController extends Controller
             ]);
         }
 
-        $scope = $request->get('scope', $defaultScope);
+        if ($request->filled('scope')) {
+            $scope = $request->get('scope');
+        } else {
+            if ($isComposite) {
+                $scope = 'kit';
+            } elseif ($isVariable) {
+                $scope = 'millar';
+            } elseif ($hasBulto && !$hasMillar) {
+                $scope = 'bulto';
+            } elseif ($hasMillar && !$hasBulto) {
+                $scope = 'millar';
+            } elseif ($isPartialMillar) {
+                $scope = 'millar';
+            } else {
+                $scope = 'kit';
+            }
+        }
+
         $labels = $this->formatLabelsList($prod, $scope);
         $pdfUrl = route('ticket.pdf', ['id' => $id, 'scope' => $scope]);
-        return view('bag_factory.ticket', compact('labels', 'pdfUrl', 'scope', 'prod', 'isComposite'));
+        return view('bag_factory.ticket', compact('labels', 'pdfUrl', 'scope', 'prod', 'isComposite', 'canKit', 'canBulto', 'canMillar'));
     }
 
     public function ticketPdf($id, Request $request)
     {
         $prod = BagProduction::with(['user', 'product', 'shift.user', 'reviewer'])->findOrFail($id);
-        $isVariable = (bool)($prod->product?->is_variable_quantity);
-        $isComposite = $isVariable && (bool)($prod->product?->is_composite_rolls);
-        $defaultScope = $isComposite ? 'kit' : 'millar';
+        $product = $prod->product;
+        $isVariable = (bool)($product?->is_variable_quantity);
+        $isComposite = $isVariable && (bool)($product?->is_composite_rolls);
+
+        $hasBulto = $product ? $product->hasBultoPackaging() : false;
+        $hasMillar = $product ? $product->hasMillarPackaging() : true;
+
+        $siblingBulto = $product?->findSiblingBultoProduct();
+        $bultoCapacity = (float)($siblingBulto ? $siblingBulto->getRealMillarPerBulto() : ($product ? $product->getRealMillarPerBulto() : 20));
+        $isPartialMillar = ($product?->sale_unit === 'MILLAR' && $prod->quantity < $bultoCapacity);
 
         if (!$prod->is_printed) {
             $prod->update([
@@ -1382,7 +1417,24 @@ class BagFactoryWebController extends Controller
             ]);
         }
 
-        $scope = $request->get('scope', $defaultScope);
+        if ($request->filled('scope')) {
+            $scope = $request->get('scope');
+        } else {
+            if ($isComposite) {
+                $scope = 'kit';
+            } elseif ($isVariable) {
+                $scope = 'millar';
+            } elseif ($hasBulto && !$hasMillar) {
+                $scope = 'bulto';
+            } elseif ($hasMillar && !$hasBulto) {
+                $scope = 'millar';
+            } elseif ($isPartialMillar) {
+                $scope = 'millar';
+            } else {
+                $scope = 'kit';
+            }
+        }
+
         $labels = $this->formatLabelsList($prod, $scope);
         $this->logLabelsPrint($labels);
         $size = $request->get('size', '80mm');
@@ -1482,11 +1534,39 @@ class BagFactoryWebController extends Controller
 
     public function formatLabelsList(BagProduction $prod, string $scope = 'millar'): array
     {
-        $isVariable = (bool)($prod->product?->is_variable_quantity);
-        $saleUnit = strtoupper($prod->product?->sale_unit ?? 'BULTO');
+        $product = $prod->product;
+        $isVariable = (bool)($product?->is_variable_quantity);
+        $saleUnit = strtoupper($product?->sale_unit ?? 'BULTO');
         $qty = max(1, (int)$prod->quantity);
         $totalWeight = (float)$prod->weight;
-        $millarPerBulto = (float)($prod->product?->millar_per_bulto > 0 ? $prod->product->millar_per_bulto : 1.0);
+
+        // Capacidad de millares sanitizada (ignora valores desfasados >= 100 de BD como 1000)
+        $rawMpb = (float)($product?->millar_per_bulto ?? 1);
+        $millarPerBulto = ($rawMpb > 0 && $rawMpb < 100) ? $rawMpb : 1.0;
+
+        // Búsqueda de productos hermanos Bulto y Millar
+        $siblingBulto = $product?->findSiblingBultoProduct();
+        $siblingMillar = $product?->findSiblingMillarProduct();
+
+        $bultoProduct = ($saleUnit === 'BULTO') ? $product : ($siblingBulto ?: $product);
+        $millarProduct = ($saleUnit === 'MILLAR') ? $product : ($siblingMillar ?: $product);
+
+        $bultoCapacity = (float)($bultoProduct ? $bultoProduct->getRealMillarPerBulto() : $millarPerBulto);
+        if ($bultoCapacity <= 1 && $siblingBulto) {
+            $bultoCapacity = (float)$siblingBulto->getRealMillarPerBulto();
+        }
+        if ($bultoCapacity < 1) {
+            $bultoCapacity = 1.0;
+        }
+
+        $bultoProdName = mb_strtoupper($bultoProduct?->name ?? $product?->name ?? 'PRODUCTO', 'UTF-8');
+        $bultoSku = $bultoProduct?->sku ?? $product?->sku ?? 'S/SKU';
+
+        $millarProdName = mb_strtoupper($millarProduct?->name ?? $product?->name ?? 'PRODUCTO', 'UTF-8');
+        $millarSku = $millarProduct?->sku ?? $product?->sku ?? 'S/SKU';
+
+        // Comprobación si el nombre ya describe el empaque ("1 MILLAR", "20 MILLARE", etc.)
+        $nameDescribesPackaging = (bool)preg_match('/(millar|milar|und|bobina|paquete|fardo)/i', $millarProdName);
 
         $rolls = [];
         if (!empty($prod->metadata)) {
@@ -1638,16 +1718,19 @@ class BagFactoryWebController extends Controller
             }
         } else {
             // Productos estándar (Bolsas homogéneas)
+            $canDoBulto = ($bultoCapacity > 1 || $siblingBulto || $saleUnit === 'BULTO');
+
             // 1. Caso: Modo Bulto (Etiqueta Master Exterior)
-            if ($scope === 'bulto') {
-                for ($b = 0; $b < $qty; $b++) {
-                    $bultoQr = $qty > 1 ? "{$baseQr}-B" . ($b + 1) : $baseQr;
-                    $pres = $millarPerBulto > 1 ? "1 BULTO (" . (int)$millarPerBulto . " MILLARES)" : "1 {$saleUnit}";
+            if ($scope === 'bulto' && $canDoBulto) {
+                $bultoCount = ($saleUnit === 'BULTO') ? $qty : max(1, (int)floor($qty / $bultoCapacity));
+                for ($b = 0; $b < $bultoCount; $b++) {
+                    $bultoQr = $bultoCount > 1 ? "{$baseQr}-B" . ($b + 1) : $baseQr;
+                    $pres = $nameDescribesPackaging ? '' : ($bultoCapacity > 1 ? "1 BULTO (" . (int)$bultoCapacity . " MILLARES)" : "1 {$saleUnit}");
                     $labels[] = [
                         'id'                => $prod->id,
                         'index'             => $b + 1,
-                        'total_in_batch'    => $qty,
-                        'product_name'      => $prodName,
+                        'total_in_batch'    => $bultoCount,
+                        'product_name'      => $bultoProdName,
                         'presentation_info' => $pres,
                         'operator_name'     => $operatorName,
                         'production_date'   => $prodDate,
@@ -1659,26 +1742,53 @@ class BagFactoryWebController extends Controller
                         'grade_desc'        => $gradeDesc,
                         'grade_label'       => $gradeLabel,
                         'qr_code'           => $bultoQr,
-                        'sku'               => $sku,
+                        'sku'               => $bultoSku,
                         'label_type'        => 'bulto',
                     ];
                 }
-            } elseif ($scope === 'kit') {
+            } elseif ($scope === 'kit' && $canDoBulto && $bultoCapacity > 1) {
                 // 2. Caso: Kit Completo (Bulto Exterior + Millares Interiores)
+                $numBultos = ($saleUnit === 'BULTO') ? $qty : max(1, (int)floor($qty / $bultoCapacity));
+                $unitsPerBulto = (int)$bultoCapacity;
+                $totalLabels = $numBultos * ($unitsPerBulto + 1);
                 $currentIndex = 0;
-                $totalLabels = $qty * ($millarPerBulto > 1 ? ((int)$millarPerBulto + 1) : 1);
 
-                for ($b = 0; $b < $qty; $b++) {
-                    $bultoQr = $qty > 1 ? "{$baseQr}-B" . ($b + 1) : $baseQr;
-                    if ($millarPerBulto > 1) {
-                        // Etiqueta exterior de bulto
+                for ($b = 0; $b < $numBultos; $b++) {
+                    $bultoQr = $numBultos > 1 ? "{$baseQr}-B" . ($b + 1) : $baseQr;
+
+                    // Etiqueta exterior de bulto
+                    $currentIndex++;
+                    $presBulto = $nameDescribesPackaging ? '' : "1 BULTO ({$unitsPerBulto} MILLARES)";
+                    $labels[] = [
+                        'id'                => $prod->id,
+                        'index'             => $currentIndex,
+                        'total_in_batch'    => $totalLabels,
+                        'product_name'      => $bultoProdName,
+                        'presentation_info' => $presBulto,
+                        'operator_name'     => $operatorName,
+                        'production_date'   => $prodDate,
+                        'approver_name'     => $approverName,
+                        'is_variable'       => false,
+                        'weight_kg'         => 0.0,
+                        'batch_code'        => $batchCode,
+                        'quality_grade'     => $grade,
+                        'grade_desc'        => $gradeDesc,
+                        'grade_label'       => $gradeLabel,
+                        'qr_code'           => $bultoQr,
+                        'sku'               => $bultoSku,
+                        'label_type'        => 'bulto',
+                    ];
+
+                    // Etiquetas interiores de millar
+                    for ($m = 1; $m <= $unitsPerBulto; $m++) {
                         $currentIndex++;
+                        $presMillar = $nameDescribesPackaging ? '' : "1 MILLAR";
                         $labels[] = [
                             'id'                => $prod->id,
                             'index'             => $currentIndex,
                             'total_in_batch'    => $totalLabels,
-                            'product_name'      => $prodName,
-                            'presentation_info' => "1 BULTO (" . (int)$millarPerBulto . " MILLARES)",
+                            'product_name'      => $millarProdName,
+                            'presentation_info' => $presMillar,
                             'operator_name'     => $operatorName,
                             'production_date'   => $prodDate,
                             'approver_name'     => $approverName,
@@ -1688,89 +1798,42 @@ class BagFactoryWebController extends Controller
                             'quality_grade'     => $grade,
                             'grade_desc'        => $gradeDesc,
                             'grade_label'       => $gradeLabel,
-                            'qr_code'           => $bultoQr,
-                            'sku'               => $sku,
-                            'label_type'        => 'bulto',
-                        ];
-
-                        // Etiquetas interiores de millar
-                        for ($m = 1; $m <= (int)$millarPerBulto; $m++) {
-                            $currentIndex++;
-                            $labels[] = [
-                                'id'                => $prod->id,
-                                'index'             => $currentIndex,
-                                'total_in_batch'    => $totalLabels,
-                                'product_name'      => $prodName,
-                                'presentation_info' => "1 MILLAR",
-                                'operator_name'     => $operatorName,
-                                'production_date'   => $prodDate,
-                                'approver_name'     => $approverName,
-                                'is_variable'       => false,
-                                'weight_kg'         => 0.0,
-                                'batch_code'        => $batchCode,
-                                'quality_grade'     => $grade,
-                                'grade_desc'        => $gradeDesc,
-                                'grade_label'       => $gradeLabel,
-                                'qr_code'           => "{$bultoQr}-M{$m}",
-                                'sku'               => $sku,
-                                'label_type'        => 'millar',
-                            ];
-                        }
-                    } else {
-                        // Bulto es 1 millar
-                        $currentIndex++;
-                        $labels[] = [
-                            'id'                => $prod->id,
-                            'index'             => $currentIndex,
-                            'total_in_batch'    => $totalLabels,
-                            'product_name'      => $prodName,
-                            'presentation_info' => "1 MILLAR",
-                            'operator_name'     => $operatorName,
-                            'production_date'   => $prodDate,
-                            'approver_name'     => $approverName,
-                            'is_variable'       => false,
-                            'weight_kg'         => 0.0,
-                            'batch_code'        => $batchCode,
-                            'quality_grade'     => $grade,
-                            'grade_desc'        => $gradeDesc,
-                            'grade_label'       => $gradeLabel,
-                            'qr_code'           => $bultoQr,
-                            'sku'               => $sku,
+                            'qr_code'           => "{$bultoQr}-M{$m}",
+                            'sku'               => $millarSku,
                             'label_type'        => 'millar',
                         ];
                     }
                 }
             } else {
-                // 3. Caso: Modo Millar (Interiores por Defecto)
-                $millarCount = ($millarPerBulto > 1) ? (int)$millarPerBulto : 1;
-                $totalMillares = $qty * $millarCount;
+                // 3. Caso: Modo Millar (o si no aplica kit/bulto)
+                // Si la unidad es MILLAR, $qty ya es el total de millares (ej. 5 millares -> 5 etiquetas)
+                // Si la unidad es BULTO, se desglosa en ($qty * $bultoCapacity)
+                $totalMillares = ($saleUnit === 'BULTO') ? ($qty * (int)$bultoCapacity) : $qty;
                 $currentIndex = 0;
 
-                for ($b = 0; $b < $qty; $b++) {
-                    $bultoQr = $qty > 1 ? "{$baseQr}-B" . ($b + 1) : $baseQr;
-                    for ($m = 1; $m <= $millarCount; $m++) {
-                        $currentIndex++;
-                        $millarQr = $millarCount > 1 ? "{$bultoQr}-M{$m}" : $bultoQr;
-                        $labels[] = [
-                            'id'                => $prod->id,
-                            'index'             => $currentIndex,
-                            'total_in_batch'    => $totalMillares,
-                            'product_name'      => $prodName,
-                            'presentation_info' => "1 MILLAR",
-                            'operator_name'     => $operatorName,
-                            'production_date'   => $prodDate,
-                            'approver_name'     => $approverName,
-                            'is_variable'       => false,
-                            'weight_kg'         => 0.0,
-                            'batch_code'        => $batchCode,
-                            'quality_grade'     => $grade,
-                            'grade_desc'        => $gradeDesc,
-                            'grade_label'       => $gradeLabel,
-                            'qr_code'           => $millarQr,
-                            'sku'               => $sku,
-                            'label_type'        => 'millar',
-                        ];
-                    }
+                for ($m = 1; $m <= $totalMillares; $m++) {
+                    $currentIndex++;
+                    $millarQr = $totalMillares > 1 ? "{$baseQr}-M{$m}" : $baseQr;
+                    $presMillar = $nameDescribesPackaging ? '' : "1 MILLAR";
+                    $labels[] = [
+                        'id'                => $prod->id,
+                        'index'             => $currentIndex,
+                        'total_in_batch'    => $totalMillares,
+                        'product_name'      => $millarProdName,
+                        'presentation_info' => $presMillar,
+                        'operator_name'     => $operatorName,
+                        'production_date'   => $prodDate,
+                        'approver_name'     => $approverName,
+                        'is_variable'       => false,
+                        'weight_kg'         => 0.0,
+                        'batch_code'        => $batchCode,
+                        'quality_grade'     => $grade,
+                        'grade_desc'        => $gradeDesc,
+                        'grade_label'       => $gradeLabel,
+                        'qr_code'           => $millarQr,
+                        'sku'               => $millarSku,
+                        'label_type'        => 'millar',
+                    ];
                 }
             }
         }
