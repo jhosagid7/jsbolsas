@@ -58,11 +58,16 @@ Route::middleware('auth')->group(function () {
     Route::post('/formulas', [BagFactoryWebController::class, 'formulasStore'])->name('formulas.store');
     Route::post('/formulas/{id}/version', [BagFactoryWebController::class, 'formulasNewVersion'])->name('formulas.new_version');
 
-    // Materias Primas
+    // Materias Primas & Inventario de Dos Depósitos
     Route::get('/raw-materials', [BagFactoryWebController::class, 'rawMaterialsIndex'])->name('raw_materials.index');
     Route::get('/materias-primas', [BagFactoryWebController::class, 'rawMaterialsIndex'])->name('raw_materials.index_alias');
     Route::post('/raw-materials', [BagFactoryWebController::class, 'rawMaterialsStore'])->name('raw_materials.store');
     Route::post('/raw-materials/{id}/price', [BagFactoryWebController::class, 'rawMaterialsUpdatePrice'])->name('raw_materials.update_price');
+    Route::get('/raw-materials/inventory', [BagFactoryWebController::class, 'rawMaterialsInventoryIndex'])->name('raw_materials.inventory');
+    Route::post('/raw-materials/transfers', [BagFactoryWebController::class, 'rawMaterialsTransferStore'])->name('raw_materials.transfers.store');
+    Route::post('/raw-materials/stocks/init', [BagFactoryWebController::class, 'rawMaterialsStockInit'])->name('raw_materials.stocks.init');
+    Route::get('/raw-materials/audit', [BagFactoryWebController::class, 'rawMaterialsAuditIndex'])->name('raw_materials.audit');
+    Route::post('/raw-materials/audit', [BagFactoryWebController::class, 'rawMaterialsAuditStore'])->name('raw_materials.audit.store');
 
     // Costos y Simulador de Precios
     Route::get('/costs', [BagFactoryWebController::class, 'costsIndex'])->name('costs.index');

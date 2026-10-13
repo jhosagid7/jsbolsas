@@ -12,7 +12,10 @@ use App\Models\BagShift;
 use App\Models\FormulaVersion;
 use App\Models\ProductionFormula;
 use App\Models\RawMaterial;
+use App\Models\RawMaterialAudit;
 use App\Models\RawMaterialPriceHistory;
+use App\Models\RawMaterialStock;
+use App\Models\RawMaterialTransfer;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -594,6 +597,182 @@ class BagFactoryWebController extends Controller
         }
 
         return back()->with('status', "Precio de '{$mat->name}' actualizado a \${$history->final_price}/Kg. Se generó nueva versión de las fórmulas asociadas e histórico inmutable.");
+    }
+
+    // ==================== INVENTARIO DE DOS DEPÓSITOS & BALANCE SEMANAL ====================
+    public function rawMaterialsInventoryIndex()
+    {
+        $this->authorizeAdminOrSupervisor();
+        $materials = RawMaterial::where('is_active', true)->orderBy('name')->get();
+
+        // Cargar stocks de ambos almacenes
+        $stocks = RawMaterialStock::with('rawMaterial')->get();
+        $principalStocks = $stocks->where('warehouse_type', 'principal')->keyBy('raw_material_id');
+        $plantaStocks = $stocks->where('warehouse_type', 'planta')->keyBy('raw_material_id');
+
+        $transfers = RawMaterialTransfer::with(['rawMaterial', 'transferredByUser', 'receivedByUser'])
+            ->latest('transferred_at')
+            ->take(30)
+            ->get();
+
+        return view('raw_materials.inventory', compact('materials', 'principalStocks', 'plantaStocks', 'transfers'));
+    }
+
+    public function rawMaterialsStockInit(Request $request)
+    {
+        $this->authorizeAdminOrSupervisor();
+        $request->validate([
+            'raw_material_id' => 'required|exists:raw_materials,id',
+            'warehouse_type'  => 'required|in:principal,planta',
+            'sacos_count'     => 'required|numeric|min:0',
+            'kg_per_saco'     => 'nullable|numeric|min:1',
+        ]);
+
+        $kgPerSaco = (float)($request->kg_per_saco ?: 25.0);
+        $sacos = (float)$request->sacos_count;
+        $totalKg = round($sacos * $kgPerSaco, 4);
+
+        $stock = RawMaterialStock::updateOrCreate(
+            ['raw_material_id' => $request->raw_material_id, 'warehouse_type' => $request->warehouse_type],
+            ['sacos_count' => $sacos, 'total_kg' => $totalKg]
+        );
+
+        $whName = $request->warehouse_type === 'principal' ? 'Almacén Principal' : 'Planta (Pie de Tolva)';
+        return back()->with('status', "Stock actualizado en {$whName}: {$sacos} sacos ({$totalKg} Kg).");
+    }
+
+    public function rawMaterialsTransferStore(Request $request)
+    {
+        $this->authorizeAdminOrSupervisor();
+        $request->validate([
+            'raw_material_id'   => 'required|exists:raw_materials,id',
+            'sacos_transferred' => 'required|numeric|min:0.1',
+            'kg_per_saco'       => 'nullable|numeric|min:1',
+            'notes'             => 'nullable|string',
+        ]);
+
+        $kgPerSaco = (float)($request->kg_per_saco ?: 25.0);
+        $sacos = (float)$request->sacos_transferred;
+        $weightKg = round($sacos * $kgPerSaco, 4);
+
+        // Descontar del Almacén Principal
+        $stockPrincipal = RawMaterialStock::getOrCreate($request->raw_material_id, 'principal');
+        if ($stockPrincipal->sacos_count < $sacos) {
+            return back()->with('error', "Stock insuficiente en Almacén Principal (Disponible: {$stockPrincipal->sacos_count} sacos).");
+        }
+
+        $stockPrincipal->decrement('sacos_count', $sacos);
+        $stockPrincipal->decrement('total_kg', $weightKg);
+
+        // Aumentar en Depósito de Planta (Pie de tolva)
+        $stockPlanta = RawMaterialStock::getOrCreate($request->raw_material_id, 'planta');
+        $stockPlanta->increment('sacos_count', $sacos);
+        $stockPlanta->increment('total_kg', $weightKg);
+
+        // Registrar trazabilidad de la transferencia
+        RawMaterialTransfer::create([
+            'raw_material_id'   => $request->raw_material_id,
+            'from_warehouse'    => 'principal',
+            'to_warehouse'      => 'planta',
+            'sacos_transferred' => $sacos,
+            'weight_kg'         => $weightKg,
+            'transferred_by'    => Auth::id(),
+            'transferred_at'    => now(),
+            'notes'             => $request->notes,
+        ]);
+
+        $mat = RawMaterial::find($request->raw_material_id);
+        return back()->with('status', "Transferencia de {$sacos} sacos ({$weightKg} Kg de {$mat->name}) a Planta registrada correctamente.");
+    }
+
+    public function rawMaterialsAuditIndex(Request $request)
+    {
+        $this->authorizeAdminOrSupervisor();
+
+        $startDate = $request->filled('start_date') ? Carbon::parse($request->start_date)->startOfDay() : now()->subDays(6)->startOfDay();
+        $endDate = $request->filled('end_date') ? Carbon::parse($request->end_date)->endOfDay() : now()->endOfDay();
+
+        // 1. Kilos transferidos a planta en la semana
+        $transferredToPlantKg = (float)RawMaterialTransfer::whereBetween('transferred_at', [$startDate, $endDate])
+            ->sum('weight_kg');
+
+        // 2. Producción conforme de bobinas en el período
+        $goodProductionKg = (float)BagProduction::whereBetween('recorded_at', [$startDate, $endDate])
+            ->where('is_waste_record', false)
+            ->sum('weight');
+
+        // 3. Merma de calibración / purga en el período
+        $wastePurgaKg = (float)BagProduction::whereBetween('recorded_at', [$startDate, $endDate])
+            ->sum('waste_weight_kg');
+
+        // 4. Stock actual estimado en planta
+        $currentPlantKg = (float)RawMaterialStock::where('warehouse_type', 'planta')->sum('total_kg');
+
+        // 5. Histórico de arqueos realizados
+        $audits = RawMaterialAudit::with('auditor')->latest('audit_date')->take(10)->get();
+
+        return view('raw_materials.weekly_audit', compact(
+            'startDate',
+            'endDate',
+            'transferredToPlantKg',
+            'goodProductionKg',
+            'wastePurgaKg',
+            'currentPlantKg',
+            'audits'
+        ));
+    }
+
+    public function rawMaterialsAuditStore(Request $request)
+    {
+        $this->authorizeAdminOrSupervisor();
+        $request->validate([
+            'audit_date'             => 'required|date',
+            'period_start'           => 'required|date',
+            'period_end'             => 'required|date',
+            'initial_plant_kg'       => 'required|numeric|min:0',
+            'transferred_to_plant_kg'=> 'required|numeric|min:0',
+            'final_counted_plant_kg' => 'required|numeric|min:0',
+            'good_production_kg'     => 'required|numeric|min:0',
+            'waste_purga_kg'         => 'required|numeric|min:0',
+            'notes'                  => 'nullable|string',
+        ]);
+
+        $initial = (float)$request->initial_plant_kg;
+        $transferred = (float)$request->transferred_to_plant_kg;
+        $finalCounted = (float)$request->final_counted_plant_kg;
+        $goodProd = (float)$request->good_production_kg;
+        $wastePurga = (float)$request->waste_purga_kg;
+
+        // Consumo aparente: Inicial + Transferido - Remanente físico
+        $consumed = max(0, ($initial + $transferred) - $finalCounted);
+
+        // Descuadre de balance de masa: Consumo - (Producción Buena + Merma Purga)
+        $varianceKg = round($consumed - ($goodProd + $wastePurga), 4);
+        $variancePercent = $consumed > 0 ? round(($varianceKg / $consumed) * 100, 2) : 0.00;
+
+        $audit = RawMaterialAudit::create([
+            'audit_date'              => $request->audit_date,
+            'period_start'            => $request->period_start,
+            'period_end'              => $request->period_end,
+            'initial_plant_kg'        => $initial,
+            'transferred_to_plant_kg' => $transferred,
+            'final_counted_plant_kg'  => $finalCounted,
+            'consumed_kg'             => $consumed,
+            'good_production_kg'      => $goodProd,
+            'waste_purga_kg'          => $wastePurga,
+            'variance_kg'             => $varianceKg,
+            'variance_percentage'     => $variancePercent,
+            'status'                  => 'approved',
+            'audited_by'              => Auth::id(),
+            'notes'                   => $request->notes,
+        ]);
+
+        // Ajustar el stock de planta al conteo físico verificado del sábado
+        RawMaterialStock::where('warehouse_type', 'planta')->update([
+            'total_kg' => $finalCounted,
+        ]);
+
+        return redirect()->route('raw_materials.audit')->with('status', "Arqueo semanal registrado. Consumo: {$consumed} Kg, Conformes: {$goodProd} Kg, Purga: {$wastePurga} Kg. Desviación: {$varianceKg} Kg ({$variancePercent}%).");
     }
 
     // ==================== FÓRMULAS DE PREPARACIÓN ====================

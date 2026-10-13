@@ -66,8 +66,14 @@
             <a href="{{ route('formulas.index') }}" class="nav-link-custom {{ request()->routeIs('formulas.*') ? 'active' : '' }}">
                 <i class="bi bi-bezier2 text-warning"></i> Fórmulas de Mezcla
             </a>
-            <a href="{{ route('raw_materials.index') }}" class="nav-link-custom {{ request()->routeIs('raw_materials.*') ? 'active' : '' }}">
-                <i class="bi bi-boxes text-info"></i> Materias Primas
+            <a href="{{ route('raw_materials.index') }}" class="nav-link-custom {{ request()->routeIs('raw_materials.index*') ? 'active' : '' }}">
+                <i class="bi bi-boxes text-info"></i> Precios de Insumos
+            </a>
+            <a href="{{ route('raw_materials.inventory') }}" class="nav-link-custom {{ request()->routeIs('raw_materials.inventory*') ? 'active' : '' }}">
+                <i class="bi bi-building text-primary"></i> Dos Depósitos (Central/Planta)
+            </a>
+            <a href="{{ route('raw_materials.audit') }}" class="nav-link-custom {{ request()->routeIs('raw_materials.audit*') ? 'active' : '' }}">
+                <i class="bi bi-clipboard-data text-warning"></i> Arqueo & Balance Semanal
             </a>
             <a href="{{ route('costs.index') }}" class="nav-link-custom {{ request()->routeIs('costs.*') ? 'active' : '' }}">
                 <i class="bi bi-sliders text-success"></i> Costos & Precios
