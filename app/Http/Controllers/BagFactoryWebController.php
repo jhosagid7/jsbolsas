@@ -2493,6 +2493,8 @@ class BagFactoryWebController extends Controller
         // Fórmulas de mezcla activas para extrusión
         $formulas = ProductionFormula::where('is_active', true)->orderBy('name')->get();
 
+        $isExtrusionMachine = ($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
+
         return view('bag_factory.operator_station', compact(
             'user',
             'targetUser',
@@ -2506,7 +2508,8 @@ class BagFactoryWebController extends Controller
             'combinedProgressPercent',
             'totalUnits',
             'totalWeightKg',
-            'operatorsList'
+            'operatorsList',
+            'isExtrusionMachine'
         ));
     }
 

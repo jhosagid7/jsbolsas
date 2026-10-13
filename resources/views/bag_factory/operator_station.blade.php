@@ -1065,7 +1065,7 @@
         }
     });
 
-    const isExtrusionMachineMode = {{ $isExtrusionMachine ? 'true' : 'false' }};
+    const isExtrusionMachineMode = {{ !empty($isExtrusionMachine) ? 'true' : 'false' }};
 
     function setExtrusionWidth(val) {
         const input = document.getElementById('extrusionWidthInput');
