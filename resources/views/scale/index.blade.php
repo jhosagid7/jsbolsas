@@ -190,6 +190,8 @@
                                             $rollsList = $prod->metadata['rolls'];
                                         } elseif (isset($prod->metadata['roll']) && is_array($prod->metadata['roll'])) {
                                             $rollsList = [$prod->metadata['roll']];
+                                        } elseif (is_array($prod->metadata) && isset($prod->metadata[0]) && is_array($prod->metadata[0])) {
+                                            $rollsList = $prod->metadata;
                                         } elseif ($isBobina && (float)$prod->quantity <= 1) {
                                             $rollsList = [['weight' => (float)$prod->weight, 'color' => $prod->product->material_type ?? '', 'batch' => '']];
                                         }

@@ -208,5 +208,24 @@ class User extends Authenticatable
             'fractional_units'   => $fractionalUnits,
         ];
     }
+
+    /**
+     * Retorna las iniciales limpias de 2 caracteres del operario para código de lote industrial (ej: JS, GM, ER)
+     */
+    public function getPlantOperatorCodeAttribute(): string
+    {
+        $cleanName = preg_replace('/\s*\(.*?\)\s*/', '', $this->name ?? '');
+        $parts = preg_split('/\s+/', trim($cleanName));
+
+        if (count($parts) >= 2) {
+            return strtoupper(substr($parts[0], 0, 1) . substr($parts[1], 0, 1));
+        }
+
+        if (count($parts) === 1 && strlen($parts[0]) >= 2) {
+            return strtoupper(substr($parts[0], 0, 2));
+        }
+
+        return 'OP';
+    }
 }
 

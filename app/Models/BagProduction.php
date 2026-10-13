@@ -150,14 +150,17 @@ class BagProduction extends Model
     {
         $dateStr = ($this->recorded_at ?? now())->format('ymd');
         $machineCode = $this->effective_machine?->code ?? 'PL01';
+        $operator = $this->user ?? $this->shift?->user;
+        $opCode = $operator?->plant_operator_code ?? 'OP';
 
         $isBobina = ($this->product && $this->product->is_variable_quantity) ||
                     ($this->product && in_array(strtoupper($this->product->sale_unit ?? ''), ['BOBINA', 'KG', 'ROLLO'])) ||
-                    ($this->effective_machine && $this->effective_machine->type === 'extrusora') ||
-                    isset($this->metadata['roll_destination']);
+                    isset($this->metadata['roll_destination']) ||
+                    (isset($this->metadata['rolls']) || isset($this->metadata['roll'])) ||
+                    ($this->effective_machine && $this->effective_machine->type === 'extrusora' && (!isset($this->product->sale_unit) || strtoupper($this->product->sale_unit) !== 'BULTO'));
 
         if ($isBobina) {
-            return "L{$dateStr}-{$machineCode}";
+            return "L{$dateStr}-{$machineCode}-{$opCode}";
         }
 
         $grade = strtoupper($this->weight_quality_grade ?: 'B');

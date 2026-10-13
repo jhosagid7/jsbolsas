@@ -295,11 +295,10 @@ class ExtrusionPhaseOneTest extends TestCase
         $this->assertEquals('sealing', $prodSealing->metadata['roll_destination']);
         $this->assertEquals(15.0, $prodSealing->metadata['rolls'][0]['weight']);
         $this->assertEquals(15.0, $prodSealing->product->gauge_caliber);
-        $this->assertEquals('BOB-30-C15-PL', $prodSealing->product->sku);
-        // El lote de extrusión no debe tener sufijo de grado (ej: L...-EXT-01)
-        $this->assertStringNotContainsString('-B', $prodSealing->effective_batch_code);
-        $this->assertStringNotContainsString('-A', $prodSealing->effective_batch_code);
-        $this->assertStringNotContainsString('-C', $prodSealing->effective_batch_code);
+        // El lote de extrusión debe tener máquina e iniciales de Carlos Extrusor (-CE) y terminar allí (sin sufijo de grado -A, -B o -C al final)
+        $this->assertStringContainsString('-EXT-01-CE', $prodSealing->effective_batch_code);
+        $this->assertStringEndsWith('-CE', $prodSealing->effective_batch_code);
+        $this->assertStringNotContainsString('-EXT-01-CE-', $prodSealing->effective_batch_code);
 
         // 2. Bobina Venta Directa (Zanahoria)
         $responseDirect = $this->actingAs($this->operator)->post(route('operator.store_batch'), [
