@@ -2518,6 +2518,8 @@ class BagFactoryWebController extends Controller
             ->take(20)
             ->get();
 
+        $isExtrusionMachine = (bool)($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
+
         return view('bag_factory.operator_station', compact(
             'user',
             'targetUser',
