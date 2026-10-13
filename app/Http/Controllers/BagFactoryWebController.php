@@ -2652,9 +2652,12 @@ class BagFactoryWebController extends Controller
                 $matType .= ' Plana';
             }
 
-            // Generar o reutilizar el producto técnico de bobina para esta especificación
-            $mangaSku = 'BOB-' . str_replace('.', '_', (string)$widthCm) . ($gussetCm > 0 ? ('-F' . str_replace('.', '_', (string)$gussetCm)) : '-PL');
-            $mangaName = "BOBINA MANGA {$widthCm} CM" . ($gussetCm > 0 ? " (FUELLE {$gussetCm} CM)" : " PLANA");
+            $formattedCal = (fmod($caliber, 1.0) == 0) ? (int)$caliber : round($caliber, 1);
+            $calStr = str_replace('.', '_', (string)$formattedCal);
+
+            // Generar o reutilizar el producto técnico de bobina para esta especificación incluyendo Calibre
+            $mangaSku = 'BOB-' . str_replace('.', '_', (string)$widthCm) . "-C{$calStr}" . ($gussetCm > 0 ? ('-F' . str_replace('.', '_', (string)$gussetCm)) : '-PL');
+            $mangaName = "BOBINA MANGA {$widthCm} CM C-{$formattedCal}" . ($gussetCm > 0 ? " (FUELLE {$gussetCm} CM)" : " PLANA");
 
             $product = BagProduct::firstOrCreate(
                 ['sku' => $mangaSku],

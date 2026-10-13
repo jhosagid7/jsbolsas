@@ -142,14 +142,25 @@ class BagProduction extends Model
     }
 
     /**
-     * Discrete Batch Code: L{ymd}-{machineCode}-{grade} (e.g. L260910-EXT01-B).
+     * Discrete Batch Code:
+     * - Para Bolsas Selladas: L{ymd}-{machineCode}-{grade} (e.g. L260910-SEL01-B).
+     * - Para Bobinas de Extrusión: L{ymd}-{machineCode} (e.g. L260910-EXT01), ya que el grado A/B/C solo existe tras el sellado.
      */
     public function getEffectiveBatchCodeAttribute(): string
     {
         $dateStr = ($this->recorded_at ?? now())->format('ymd');
         $machineCode = $this->effective_machine?->code ?? 'PL01';
-        $grade = strtoupper($this->weight_quality_grade ?: 'B');
 
+        $isBobina = ($this->product && $this->product->is_variable_quantity) ||
+                    ($this->product && in_array(strtoupper($this->product->sale_unit ?? ''), ['BOBINA', 'KG', 'ROLLO'])) ||
+                    ($this->effective_machine && $this->effective_machine->type === 'extrusora') ||
+                    isset($this->metadata['roll_destination']);
+
+        if ($isBobina) {
+            return "L{$dateStr}-{$machineCode}";
+        }
+
+        $grade = strtoupper($this->weight_quality_grade ?: 'B');
         return "L{$dateStr}-{$machineCode}-{$grade}";
     }
 
@@ -158,6 +169,15 @@ class BagProduction extends Model
      */
     public function getWeightGradeLabelAttribute(): string
     {
+        $isBobina = ($this->product && $this->product->is_variable_quantity) ||
+                    ($this->product && in_array(strtoupper($this->product->sale_unit ?? ''), ['BOBINA', 'KG', 'ROLLO'])) ||
+                    ($this->effective_machine && $this->effective_machine->type === 'extrusora') ||
+                    isset($this->metadata['roll_destination']);
+
+        if ($isBobina) {
+            return "Bobina Extruida (En Proceso)";
+        }
+
         $grade = strtoupper($this->weight_quality_grade ?: 'B');
         $dev = $this->weight_deviation_percent !== null ? (float)$this->weight_deviation_percent : 0.0;
         $sign = $dev > 0 ? '+' : '';

@@ -687,8 +687,15 @@
                                         {{ $prod->quantity > 0 ? number_format($prod->weight / $prod->quantity, 3) : '--' }} Kg
                                     </td>
                                     <td class="text-center">
-                                        @php $grade = strtoupper($prod->weight_quality_grade ?: 'B'); @endphp
-                                        @if($grade === 'A')
+                                        @php
+                                            $isBob = ($prod->product && $prod->product->is_variable_quantity) || 
+                                                     ($prod->product && in_array(strtoupper($prod->product->sale_unit ?? ''), ['BOBINA', 'KG', 'ROLLO'])) ||
+                                                     isset($prod->metadata['roll_destination']);
+                                            $grade = strtoupper($prod->weight_quality_grade ?: 'B');
+                                        @endphp
+                                        @if($isBob)
+                                            <span class="badge bg-info text-dark fw-bold">🌀 EN PROCESO</span>
+                                        @elseif($grade === 'A')
                                             <span class="badge bg-warning text-dark fw-bold">🟡 GRADO A (Sobrepeso)</span>
                                         @elseif($grade === 'C')
                                             <span class="badge bg-danger text-white fw-bold">🔴 GRADO C (Subcalibre)</span>
