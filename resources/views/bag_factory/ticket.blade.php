@@ -586,6 +586,14 @@
                             @endif
 
                             <div class="info-row"><span class="info-label">LOTE:</span> <span class="info-val font-monospace">{{ $label['batch_code'] }}</span></div>
+                            @if(!empty($label['source_bobina']['batch']))
+                                <div class="info-row" style="font-size: 10px; color: #1e293b;">
+                                    <span class="info-label">BOBINA ORIGEN:</span> 
+                                    <span class="info-val font-monospace fw-bold" title="Extruido por {{ $label['source_bobina']['operator'] ?? 'Extrusor' }}">
+                                        {{ $label['source_bobina']['batch'] }}
+                                    </span>
+                                </div>
+                            @endif
                         </td>
 
                         <!-- Columna Derecha: Código QR en Imagen PNG Base64 Ultraligera -->

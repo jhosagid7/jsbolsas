@@ -70,6 +70,56 @@ class BagShift extends Model
     }
 
     /**
+     * Obtener ID de la bobina montada en la máquina selladora durante este turno (almacenado en notes como JSON o string)
+     */
+    public function getMountedBobinaIdAttribute(): ?int
+    {
+        if (empty($this->notes)) return null;
+        $decoded = json_decode($this->notes, true);
+        if (is_array($decoded) && isset($decoded['mounted_bobina_id'])) {
+            return (int)$decoded['mounted_bobina_id'];
+        }
+        return null;
+    }
+
+    /**
+     * Retorna el objeto BagProduction de la bobina montada actualmente
+     */
+    public function getMountedBobinaAttribute(): ?BagProduction
+    {
+        $id = $this->mounted_bobina_id;
+        if (!$id) return null;
+        return BagProduction::with(['product', 'user', 'shift.machine'])->find($id);
+    }
+
+    /**
+     * Montar una bobina en la selladora para este turno
+     */
+    public function mountBobina(int $bobinaId): void
+    {
+        $data = json_decode($this->notes, true);
+        if (!is_array($data)) {
+            $data = $this->notes ? ['raw_notes' => $this->notes] : [];
+        }
+        $data['mounted_bobina_id'] = $bobinaId;
+        $data['mounted_at'] = now()->toDateTimeString();
+        $this->update(['notes' => json_encode($data)]);
+    }
+
+    /**
+     * Desmontar la bobina activa
+     */
+    public function unmountBobina(): void
+    {
+        $data = json_decode($this->notes, true);
+        if (is_array($data)) {
+            unset($data['mounted_bobina_id']);
+            unset($data['mounted_at']);
+            $this->update(['notes' => !empty($data) ? json_encode($data) : null]);
+        }
+    }
+
+    /**
      * Duration in decimal hours (e.g. 8.5).
      */
     public function getDurationHoursAttribute(): float

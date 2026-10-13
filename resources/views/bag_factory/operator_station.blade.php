@@ -238,12 +238,66 @@
                         <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                             <div class="d-flex align-items-center gap-2">
                                 <span class="badge bg-primary text-white fw-bold px-2 py-1 fs-6">✂️ BOBINAS LISTAS PARA SELLADO</span>
-                                <span class="text-white-50 small">Bobinas de manga continua listas para montar</span>
+                                <span class="text-white-50 small">Bobinas de manga continua listas para montar en portarrollos</span>
                             </div>
-                            <span class="badge bg-dark border border-secondary text-info fw-normal">
-                                {{ $availableBobinas->count() }} bobina(s) en piso
-                            </span>
+                            <div class="d-flex align-items-center gap-2">
+                                {{-- Lector / Input Rápido de Código QR / SKU de Bobina --}}
+                                <form action="{{ route('operator.mount_bobina') }}" method="POST" class="d-inline-flex gap-1 align-items-center mb-0">
+                                    @csrf
+                                    @if(!$user->isOperator() && request('operator_id'))
+                                        <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                    @endif
+                                    <div class="input-group input-group-sm" style="width: 220px;">
+                                        <span class="input-group-text bg-dark border-secondary text-warning" title="Escanear QR de Bobina">📷</span>
+                                        <input type="text" name="qr_code" class="form-control form-control-sm bg-dark text-white border-secondary font-monospace" placeholder="Escanear QR Bobina..." style="font-size: 11px;">
+                                        <button type="submit" class="btn btn-outline-info btn-sm fw-bold">Montar</button>
+                                    </div>
+                                </form>
+                                <span class="badge bg-dark border border-secondary text-info fw-normal">
+                                    {{ $availableBobinas->count() }} bobina(s) en piso
+                                </span>
+                            </div>
                         </div>
+
+                        {{-- BANNER DE BOBINA MONTADA ACTUALMENTE EN LA SELLADORA --}}
+                        @if(!empty($mountedBobina))
+                            @php
+                                $mProduct = $mountedBobina->product;
+                                $mWidth = (float)($mProduct?->width_inch ?? 0);
+                            @endphp
+                            <div class="p-2 mb-3 rounded border border-success bg-dark d-flex justify-content-between align-items-center flex-wrap gap-2 shadow-sm" style="background: rgba(16, 185, 129, 0.08) !important;">
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="badge bg-success text-dark fs-6 fw-bold px-2 py-1">
+                                        ⚙️ BOBINA MONTADA EN MÁQUINA
+                                    </span>
+                                    <div class="text-white small">
+                                        <strong class="text-warning fs-6">{{ $mProduct?->name ?? 'Bobina Extruida' }}</strong>
+                                        <span class="text-white-50 ms-2 font-monospace">📏 {{ $mProduct?->getDimensionsCmFormatted() ?: 'Manga Continua' }}</span>
+                                        <span class="badge bg-dark border border-warning text-warning ms-2 font-monospace">Lote: {{ $mountedBobina->effective_batch_code }}</span>
+                                        <span class="badge bg-info text-dark ms-1">Extrusor: {{ $mountedBobina->user?->name ?? 'Operador' }}</span>
+                                        <span class="badge bg-secondary ms-1">{{ number_format($mountedBobina->weight, 2) }} Kg</span>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button type="button" class="btn btn-outline-info btn-sm fw-bold py-1 px-2" style="font-size: 11px;" onclick="filterProductsByBobinaWidth({{ $mWidth }})">
+                                        🎯 Filtrar bolsas de {{ $mWidth > 0 ? $mWidth . ' cm' : 'esta medida' }}
+                                    </button>
+                                    <form action="{{ route('operator.unmount_bobina') }}" method="POST" class="d-inline mb-0">
+                                        @csrf
+                                        @if(!$user->isOperator() && request('operator_id'))
+                                            <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                        @endif
+                                        <button type="submit" class="btn btn-outline-danger btn-sm fw-bold py-1 px-2" style="font-size: 11px;" title="Desmontar bobina de la selladora">
+                                            ✕ Desmontar
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        @else
+                            <div class="p-2 mb-2 rounded border border-warning bg-black bg-opacity-40 d-flex justify-content-between align-items-center text-white-50 small">
+                                <span>⚠️ <strong>Ninguna bobina montada en esta selladora.</strong> Elige una bobina de la bandeja inferior o escanea su QR para garantizar trazabilidad.</span>
+                            </div>
+                        @endif
 
                         @if($availableBobinas->isEmpty())
                             <div class="p-2 text-center text-white-50 small bg-dark rounded border border-secondary">
@@ -252,7 +306,10 @@
                         @else
                             <div class="d-flex gap-2 overflow-auto pb-2" style="white-space: nowrap;">
                                 @foreach($availableBobinas as $bob)
-                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start" style="min-width: 240px; max-width: 280px; border-radius: 10px;">
+                                    @php
+                                        $isThisMounted = !empty($mountedBobina) && $mountedBobina->id === $bob->id;
+                                    @endphp
+                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start {{ $isThisMounted ? 'border-success ring-2' : '' }}" style="min-width: 260px; max-width: 300px; border-radius: 10px;">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <strong class="text-info text-truncate" style="font-size: 12px;" title="{{ $bob->product->name ?? 'Bobina' }}">
                                                 {{ $bob->product->name ?? 'Bobina Extrusión' }}
@@ -270,10 +327,26 @@
                                             </span>
                                             <div class="d-flex justify-content-between align-items-center text-white-50 mt-1 pt-1 border-top border-secondary" style="font-size: 10px;">
                                                 <span>👤 {{ Str::limit($bob->user->name ?? 'Extrusor', 12) }}</span>
-                                                <a href="{{ route('ticket', ['id' => $bob->id, 'scope' => 'bulto']) }}" target="_blank"
-                                                   class="btn btn-outline-info btn-sm py-0 px-2 fw-bold" style="font-size: 10px;">
-                                                    🖨️ Etiqueta
-                                                </a>
+                                                <div class="d-flex gap-1">
+                                                    @if($isThisMounted)
+                                                        <span class="badge bg-success text-dark fw-bold">✓ MONTADA</span>
+                                                    @else
+                                                        <form action="{{ route('operator.mount_bobina') }}" method="POST" class="d-inline mb-0">
+                                                            @csrf
+                                                            <input type="hidden" name="bobina_id" value="{{ $bob->id }}">
+                                                            @if(!$user->isOperator() && request('operator_id'))
+                                                                <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                                            @endif
+                                                            <button type="submit" class="btn btn-primary btn-sm py-0 px-2 fw-bold" style="font-size: 10px;" title="Montar esta bobina en el portarrollos">
+                                                                ⚙️ Montar
+                                                            </button>
+                                                        </form>
+                                                    @endif
+                                                    <a href="{{ route('ticket', ['id' => $bob->id, 'scope' => 'bulto']) }}" target="_blank"
+                                                       class="btn btn-outline-info btn-sm py-0 px-2 fw-bold" style="font-size: 10px;">
+                                                        🖨️
+                                                    </a>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -418,6 +491,7 @@
                         </div>
                 @else
                     {{-- MODO SELLADORA / CONVERSIÓN: CATÁLOGO DE BOLSAS TERMINADAS --}}
+                    <input type="hidden" name="source_bobina_id" id="sourceBobinaIdInput" value="{{ $mountedBobina?->id ?? '' }}">
                     <div class="row g-3">
                         {{-- Columna 1: Selección de Producto / Medida --}}
                         <div class="col-12 col-lg-5">
@@ -1133,6 +1207,18 @@
             closeProductDropdown();
         }
     });
+
+    // Filtro inteligente por ancho de bobina montada (ej: 30 cm)
+    function filterProductsByBobinaWidth(width) {
+        if (!width || width <= 0) return;
+        const input = document.getElementById('productSearchInput');
+        if (input) {
+            input.value = width.toString();
+            handleSearchInput(input.value);
+            openProductDropdown();
+            input.focus();
+        }
+    }
 
     const isExtrusionMachineMode = {{ !empty($isExtrusionMachine) ? 'true' : 'false' }};
 

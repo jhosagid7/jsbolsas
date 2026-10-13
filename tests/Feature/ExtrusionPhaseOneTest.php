@@ -320,4 +320,111 @@ class ExtrusionPhaseOneTest extends TestCase
         $this->assertEquals(28.0, $prodDirect->metadata['rolls'][0]['weight']);
         $this->assertEquals('BOB-40-C3-PL', $prodDirect->product->sku);
     }
+
+    /** @test */
+    public function sealing_operator_can_mount_bobina_and_link_bags_production_traceability()
+    {
+        // 1. Crear operario sellador y máquina selladora
+        $sealer = User::create([
+            'name'     => 'Pedro Sellador',
+            'email'    => 'pedro.sellador.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $sealerMachine = BagMachine::create([
+            'name'      => 'Selladora Lateral 01',
+            'code'      => 'SEL-01',
+            'type'      => 'selladora',
+            'is_active' => true,
+        ]);
+
+        // 2. Extrusor abre turno y fabrica una bobina para sellar
+        $extShift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        $bobina = BagProduction::create([
+            'bag_shift_id'          => $extShift->id,
+            'user_id'               => $this->operator->id, // Carlos Extrusor (-CE)
+            'product_id'            => $this->mangaProduct->id,
+            'machine_id'            => $this->extruder->id,
+            'quantity'              => 1,
+            'weight'                => 20.0,
+            'status'                => 'pending_review',
+            'recorded_at'           => now(),
+            'metadata'              => [
+                'roll_destination' => 'sealing',
+            ],
+        ]);
+
+        // 3. Sellador abre turno en la máquina selladora
+        $shiftResponse = $this->actingAs($sealer)->post(route('operator.open_shift'), [
+            'machine_id' => $sealerMachine->id,
+            'shift_type' => 'diurno',
+        ]);
+        $shiftResponse->assertRedirect(route('operator.station'));
+
+        $shift = BagShift::where('user_id', $sealer->id)->where('status', 'open')->first();
+        $this->assertNotNull($shift);
+
+        // 4. Sellador monta la bobina en la selladora
+        $mountResponse = $this->actingAs($sealer)->post(route('operator.mount_bobina'), [
+            'bobina_id' => $bobina->id,
+        ]);
+        $mountResponse->assertRedirect(route('operator.station'));
+        $shift->refresh();
+        $this->assertEquals($bobina->id, $shift->mounted_bobina_id);
+        $this->assertEquals($bobina->id, $shift->mounted_bobina->id);
+
+        // 5. Crear producto bolsa terminada compatible
+        $hieloProduct = BagProduct::create([
+            'name'                  => 'Bolsa Hielo 30x50 C-15',
+            'sku'                   => 'BOL-HIELO-3050-C15',
+            'category'              => 'Bolsa Hielo',
+            'width_inch'            => 30.0,
+            'length_inch'           => 50.0,
+            'gauge_caliber'         => 15.0,
+            'sale_unit'             => 'BULTO',
+            'millar_per_bulto'      => 1.0,
+            'unit_weight_kg'        => 5.0,
+            'is_variable_quantity'  => false,
+            'is_active'             => true,
+        ]);
+
+        // 6. Sellador registra producción de bolsas
+        $prodResponse = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'product_id' => $hieloProduct->id,
+            'quantity'   => 1,
+            'weight'     => 5.0,
+            'machine_id' => $sealerMachine->id,
+            'print_mode' => 'save_only',
+        ]);
+        $prodResponse->assertRedirect(route('operator.station'));
+
+        $bagProd = BagProduction::latest('id')->first();
+        $this->assertEquals($hieloProduct->id, $bagProd->product_id);
+        // Verificar trazabilidad de bobina origen
+        $this->assertEquals($bobina->id, $bagProd->metadata['source_bobina_id']);
+        $this->assertEquals($bobina->effective_batch_code, $bagProd->metadata['source_bobina_batch']);
+        $this->assertStringContainsString('-EXT-01-CE', $bagProd->metadata['source_bobina_batch']);
+        $this->assertEquals('Carlos Extrusor', $bagProd->metadata['source_bobina_operator']);
+
+        // 7. Verificar que el ticket de la bolsa refleje el lote origen de la bobina
+        $ticketResponse = $this->actingAs($sealer)->get(route('ticket', ['id' => $bagProd->id, 'scope' => 'bulto']));
+        $ticketResponse->assertStatus(200);
+        $ticketResponse->assertSee('BOBINA ORIGEN:');
+        $ticketResponse->assertSee($bobina->effective_batch_code);
+
+        // 8. Sellador puede desmontar la bobina al terminarla
+        $unmountResponse = $this->actingAs($sealer)->post(route('operator.unmount_bobina'));
+        $unmountResponse->assertRedirect(route('operator.station'));
+        $shift->refresh();
+        $this->assertNull($shift->mounted_bobina_id);
+    }
 }

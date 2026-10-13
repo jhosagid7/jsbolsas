@@ -142,6 +142,31 @@ class BagProduction extends Model
     }
 
     /**
+     * Bobina madre de extrusión de donde proviene este lote de bolsas selladas
+     */
+    public function sourceBobina(): BelongsTo
+    {
+        return $this->belongsTo(BagProduction::class, 'source_bobina_id');
+    }
+
+    /**
+     * Retorna la bobina fuente efectiva (por relación directa o por metadata)
+     */
+    public function getEffectiveSourceBobinaAttribute(): ?BagProduction
+    {
+        if ($this->relationLoaded('sourceBobina') && $this->sourceBobina) {
+            return $this->sourceBobina;
+        }
+
+        $sourceId = $this->source_bobina_id ?? ($this->metadata['source_bobina_id'] ?? null);
+        if ($sourceId) {
+            return BagProduction::with(['product', 'user', 'shift.machine'])->find($sourceId);
+        }
+
+        return null;
+    }
+
+    /**
      * Discrete Batch Code:
      * - Para Bolsas Selladas: L{ymd}-{machineCode}-{grade} (e.g. L260910-SEL01-B).
      * - Para Bobinas de Extrusión: L{ymd}-{machineCode} (e.g. L260910-EXT01), ya que el grado A/B/C solo existe tras el sellado.

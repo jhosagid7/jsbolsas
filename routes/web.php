@@ -126,6 +126,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/operario/produccion/batch/{id}', [BagFactoryWebController::class, 'operatorDestroyBatch'])->name('operator.destroy_batch');
     Route::post('/operario/turno/abrir', [BagFactoryWebController::class, 'operatorOpenShift'])->name('operator.open_shift');
     Route::post('/operario/turno/cerrar', [BagFactoryWebController::class, 'operatorCloseShift'])->name('operator.close_shift');
+    Route::post('/operario/bobina/montar', [BagFactoryWebController::class, 'operatorMountBobina'])->name('operator.mount_bobina');
+    Route::post('/operario/bobina/desmontar', [BagFactoryWebController::class, 'operatorUnmountBobina'])->name('operator.unmount_bobina');
 });
 
 require __DIR__ . '/auth.php';

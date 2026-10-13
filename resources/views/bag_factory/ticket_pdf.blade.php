@@ -126,6 +126,9 @@
                                 <p><span class="info-label">PESO:</span> <strong>{{ number_format($label['weight_kg'], 2) }} Kg</strong></p>
                             @endif
                             <p><span class="info-label">LOTE:</span> <strong>{{ $label['batch_code'] }}</strong></p>
+                            @if(!empty($label['source_bobina']['batch']))
+                                <p style="font-size: 8px;"><span class="info-label">ORIGEN:</span> <strong>{{ $label['source_bobina']['batch'] }}</strong></p>
+                            @endif
                         </td>
                         <td class="ticket-qr">
                             @if(class_exists('\Milon\Barcode\DNS2D'))

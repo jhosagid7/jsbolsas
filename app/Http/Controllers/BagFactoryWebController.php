@@ -1789,6 +1789,24 @@ class BagFactoryWebController extends Controller
         $prodName = mb_strtoupper($prod->product?->name ?? 'PRODUCTO', 'UTF-8');
         $baseQr = $prod->qr_code ?: ('PKG-' . strtoupper(Str::random(10)));
 
+        $sourceBobina = $prod->effective_source_bobina;
+        $sourceBobinaInfo = null;
+        if ($sourceBobina) {
+            $sourceBobinaInfo = [
+                'id'       => $sourceBobina->id,
+                'batch'    => $sourceBobina->effective_batch_code,
+                'operator' => $sourceBobina->user?->name,
+                'product'  => $sourceBobina->product?->name,
+            ];
+        } elseif (isset($prod->metadata['source_bobina_batch'])) {
+            $sourceBobinaInfo = [
+                'id'       => $prod->metadata['source_bobina_id'] ?? null,
+                'batch'    => $prod->metadata['source_bobina_batch'],
+                'operator' => $prod->metadata['source_bobina_operator'] ?? null,
+                'product'  => $prod->metadata['source_bobina_product'] ?? null,
+            ];
+        }
+
         if ($isVariable) {
             $isComposite = ($qty > 1 || (bool)$prod->product?->is_composite_rolls || count($rolls) > 1);
 
@@ -2049,6 +2067,14 @@ class BagFactoryWebController extends Controller
                     ];
                 }
             }
+        }
+
+        // Inyectar datos de trazabilidad cruzada (Bobina de Extrusión origen) si aplica
+        if (!empty($sourceBobinaInfo)) {
+            foreach ($labels as &$lbl) {
+                $lbl['source_bobina'] = $sourceBobinaInfo;
+            }
+            unset($lbl);
         }
 
         return $labels;
@@ -2428,7 +2454,8 @@ class BagFactoryWebController extends Controller
             ->orderBy('name')
             ->get([
                 'id', 'name', 'sku', 'sale_unit', 'unit_weight_kg', 'real_total_weight_kg',
-                'millar_per_bulto', 'target_units_per_shift', 'is_variable_quantity'
+                'millar_per_bulto', 'target_units_per_shift', 'is_variable_quantity',
+                'width_inch', 'length_inch', 'gusset_cm', 'gauge_caliber', 'material_type'
             ]);
 
         // Producciones del turno actual
@@ -2495,6 +2522,10 @@ class BagFactoryWebController extends Controller
                 'target'      => $target,
                 'millar'      => (float)($p->millar_per_bulto ?: 1),
                 'is_variable' => (bool)$p->is_variable_quantity,
+                'width_cm'    => (float)($p->width_inch ?? 0),
+                'gusset_cm'   => (float)($p->gusset_cm ?? 0),
+                'caliber'     => (float)($p->gauge_caliber ?? 0),
+                'material'    => $p->material_type ?? '',
                 'tariff'      => round($tariff, 2),
             ];
         })->values();
@@ -2530,6 +2561,7 @@ class BagFactoryWebController extends Controller
             ->get();
 
         $isExtrusionMachine = (bool)($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
+        $mountedBobina = $activeShift?->mounted_bobina;
 
         return view('bag_factory.operator_station', compact(
             'user',
@@ -2546,7 +2578,8 @@ class BagFactoryWebController extends Controller
             'totalWeightKg',
             'operatorsList',
             'isExtrusionMachine',
-            'availableBobinas'
+            'availableBobinas',
+            'mountedBobina'
         ));
     }
 
@@ -2768,6 +2801,24 @@ class BagFactoryWebController extends Controller
             ];
         }
 
+        // Detectar bobina fuente para selladoras
+        $sourceBobinaId = null;
+        if (!$isBobinaProduction) {
+            $sourceBobinaId = $request->filled('source_bobina_id')
+                ? (int)$request->source_bobina_id
+                : $shift->mounted_bobina_id;
+        }
+
+        if ($sourceBobinaId) {
+            $sourceBob = BagProduction::find($sourceBobinaId);
+            if ($sourceBob) {
+                $metadataPayload['source_bobina_id'] = $sourceBob->id;
+                $metadataPayload['source_bobina_batch'] = $sourceBob->effective_batch_code;
+                $metadataPayload['source_bobina_operator'] = $sourceBob->user?->name;
+                $metadataPayload['source_bobina_product'] = $sourceBob->product?->name;
+            }
+        }
+
         $isDirectPrint = ($request->get('print_mode') === 'direct_print');
 
         $production = BagProduction::create([
@@ -2967,5 +3018,75 @@ class BagFactoryWebController extends Controller
             : [];
 
         return redirect()->route('operator.station', $redirectParams)->with('success', 'Turno cerrado con éxito.');
+    }
+
+    /**
+     * Montar una bobina en la máquina selladora del turno activo
+     */
+    public function operatorMountBobina(Request $request)
+    {
+        $request->validate([
+            'bobina_id'   => 'nullable|exists:bag_productions,id',
+            'qr_code'     => 'nullable|string',
+            'shift_id'    => 'nullable|exists:bag_shifts,id',
+            'operator_id' => 'nullable|exists:users,id',
+        ]);
+
+        $user = Auth::user();
+        $targetUserId = (!$user->isOperator() && $request->filled('operator_id'))
+            ? (int)$request->operator_id
+            : $user->id;
+
+        $shift = $request->filled('shift_id')
+            ? BagShift::findOrFail($request->shift_id)
+            : BagShift::where('user_id', $targetUserId)->where('status', 'open')->first();
+
+        if (!$shift) {
+            return redirect()->back()->with('error', 'No hay un turno activo abierto para montar la bobina.');
+        }
+
+        $bobina = null;
+        if ($request->filled('bobina_id')) {
+            $bobina = BagProduction::with('product')->find($request->bobina_id);
+        } elseif ($request->filled('qr_code')) {
+            $code = trim($request->qr_code);
+            $bobina = BagProduction::with('product')
+                ->where('qr_code', $code)
+                ->orWhereHas('product', fn($pq) => $pq->where('sku', $code))
+                ->latest()
+                ->first();
+        }
+
+        if (!$bobina) {
+            return redirect()->back()->with('error', 'No se encontró la bobina especificada.');
+        }
+
+        $shift->mountBobina($bobina->id);
+
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
+        $mangaName = $bobina->product?->name ?? 'Bobina';
+        return redirect()->route('operator.station', $redirectParams)->with('success', "⚙️ Bobina #{$bobina->id} ({$mangaName}) montada con éxito en la selladora.");
+    }
+
+    /**
+     * Desmontar la bobina activa de la selladora
+     */
+    public function operatorUnmountBobina(Request $request)
+    {
+        $user = Auth::user();
+        $targetUserId = (!$user->isOperator() && $request->filled('operator_id'))
+            ? (int)$request->operator_id
+            : $user->id;
+
+        $shift = $request->filled('shift_id')
+            ? BagShift::findOrFail($request->shift_id)
+            : BagShift::where('user_id', $targetUserId)->where('status', 'open')->first();
+
+        if ($shift) {
+            $shift->unmountBobina();
+        }
+
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
+        return redirect()->route('operator.station', $redirectParams)->with('info', 'Bobina desmontada del portarrollos.');
     }
 }
