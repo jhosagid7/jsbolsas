@@ -536,7 +536,21 @@ class BagProduct extends Model
 
         $caliber = (float)($this->gauge_caliber ?? 0);
         if ($caliber > 0) {
-            $parts[] = "C-" . round($caliber, 1);
+            // Normalización inteligente: Si se ingresó en milésimas/decimales (ej: 0.0150 o 0.0030)
+            if ($caliber < 0.1) {
+                // Si al multiplicar por 1000 da entero exacto (ej. 0.0030 * 1000 = 3), usar x1000, si no x10000 (0.0150 * 1000 = 15)
+                $calc1000 = $caliber * 1000;
+                $calc10000 = $caliber * 10000;
+                if ($calc1000 >= 1 && fmod($calc1000, 1.0) == 0) {
+                    $commercial = $calc1000;
+                } else {
+                    $commercial = $calc10000;
+                }
+            } else {
+                $commercial = $caliber;
+            }
+            $formattedCaliber = (fmod($commercial, 1.0) == 0) ? (int)$commercial : round($commercial, 1);
+            $parts[] = "C-" . $formattedCaliber;
         }
 
         return implode(' | ', $parts);

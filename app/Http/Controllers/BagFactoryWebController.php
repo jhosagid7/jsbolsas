@@ -2493,7 +2493,30 @@ class BagFactoryWebController extends Controller
         // Fórmulas de mezcla activas para extrusión
         $formulas = ProductionFormula::where('is_active', true)->orderBy('name')->get();
 
-        $isExtrusionMachine = ($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
+        // Bobinas disponibles para sellado (WIP de Extrusión)
+        $availableBobinas = BagProduction::with(['product', 'user', 'shift.machine'])
+            ->where(function ($q) {
+                $q->where('status', 'pending_review')
+                  ->orWhere('status', 'approved');
+            })
+            ->where('is_waste_record', false)
+            ->where(function ($q) {
+                $q->whereHas('product', function ($pq) {
+                    $pq->where('category', 'like', '%Bobina%')
+                      ->orWhere('category', 'like', '%Manga%')
+                      ->orWhere('sale_unit', 'BOBINA')
+                      ->orWhere('is_variable_quantity', true);
+                })
+                ->orWhere('metadata->roll_destination', 'sealing');
+            })
+            ->where(function ($q) {
+                // Que no esté explícitamente marcada como venta directa
+                $q->whereNull('metadata->roll_destination')
+                  ->orWhere('metadata->roll_destination', '!=', 'direct_sale');
+            })
+            ->orderBy('recorded_at', 'desc')
+            ->take(20)
+            ->get();
 
         return view('bag_factory.operator_station', compact(
             'user',
@@ -2509,7 +2532,8 @@ class BagFactoryWebController extends Controller
             'totalUnits',
             'totalWeightKg',
             'operatorsList',
-            'isExtrusionMachine'
+            'isExtrusionMachine',
+            'availableBobinas'
         ));
     }
 
@@ -2600,7 +2624,14 @@ class BagFactoryWebController extends Controller
             $widthCm = round((float)$request->extrusion_width_cm, 1);
             $hasGusset = $request->get('extrusion_has_gusset') === '1' || $request->boolean('extrusion_has_gusset');
             $gussetCm = $hasGusset ? round((float)($request->extrusion_gusset_cm ?: 0), 1) : 0.0;
-            $caliber = (float)($request->extrusion_caliber ?: 3.0);
+            $inputCaliber = (float)($request->extrusion_caliber ?: 3.0);
+            if ($inputCaliber > 0 && $inputCaliber < 0.1) {
+                $c1000 = $inputCaliber * 1000;
+                $c10000 = $inputCaliber * 10000;
+                $caliber = ($c1000 >= 1 && fmod($c1000, 1.0) == 0) ? $c1000 : $c10000;
+            } else {
+                $caliber = $inputCaliber;
+            }
             $matType = trim($request->extrusion_material_type ?: 'Baja Densidad');
             if ($hasGusset) {
                 $matType .= ' Con Fuelle';
@@ -2632,7 +2663,7 @@ class BagFactoryWebController extends Controller
             );
 
             // Asegurar que si ya existía mantenga sus dimensiones actualizadas
-            if ((float)$product->width_inch !== $widthCm || (float)$product->gusset_cm !== $gussetCm) {
+            if ((float)$product->width_inch !== $widthCm || (float)$product->gusset_cm !== $gussetCm || (float)$product->gauge_caliber !== (float)$caliber) {
                 $product->update([
                     'width_inch'    => $widthCm,
                     'gusset_cm'     => $gussetCm,
@@ -2703,6 +2734,24 @@ class BagFactoryWebController extends Controller
             'waste_weight_kg'         => $wasteWeight,
         ];
 
+        $isBobinaProduction = ($product->is_variable_quantity || in_array(strtoupper($product->sale_unit ?? ''), ['BOBINA', 'KG', 'ROLLO']) || $isExtrusionDirect);
+        $rollDestination = $request->get('roll_destination', 'sealing'); // 'sealing' o 'direct_sale'
+
+        $metadataPayload = [
+            'snapshot' => $snapshot,
+        ];
+
+        if ($isBobinaProduction) {
+            $metadataPayload['roll_destination'] = $rollDestination;
+            $metadataPayload['rolls'] = [
+                [
+                    'weight' => (float)$weight,
+                    'color'  => $product->material_type ?? '',
+                    'batch'  => 'L' . now()->format('ymd') . '-' . ($shift->machine?->code ?? 'EXT01'),
+                ]
+            ];
+        }
+
         $isDirectPrint = ($request->get('print_mode') === 'direct_print');
 
         $production = BagProduction::create([
@@ -2729,7 +2778,7 @@ class BagFactoryWebController extends Controller
             'labor_retained_amount'    => $laborRetained,
             'qr_code'                  => 'PKG-' . strtoupper(Str::random(10)),
             'sync_id'                  => 'PROD-WEB-' . Str::uuid(),
-            'metadata'                 => ['snapshot' => $snapshot],
+            'metadata'                 => $metadataPayload,
         ]);
 
         if ($isDirectPrint) {

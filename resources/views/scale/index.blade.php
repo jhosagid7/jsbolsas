@@ -57,6 +57,17 @@
         <h5 class="fw-bold text-warning mb-0">
             <i class="bi bi-clock-history me-2"></i> Registros Pendientes de Revisión en Báscula ({{ $pendingProductions->count() }})
         </h5>
+        <div class="d-flex gap-1">
+            <button type="button" class="btn btn-sm btn-outline-light active filter-scale-btn" onclick="filterScaleTable('all', this)">
+                Todos ({{ $pendingProductions->count() }})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary filter-scale-btn" onclick="filterScaleTable('sealing', this)">
+                ✂️ Para Selladora
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success filter-scale-btn" onclick="filterScaleTable('direct_sale', this)">
+                📦 Venta Directa
+            </button>
+        </div>
     </div>
 
     @if($pendingProductions->isEmpty())
@@ -130,7 +141,10 @@
                                         !empty($prod->metadata);
                             $hasRolls = !empty($prod->metadata) && is_array($prod->metadata) && count($prod->metadata) > 0;
                         @endphp
-                        <tr>
+                        @php
+                            $rowDest = $prod->metadata['roll_destination'] ?? ($isBobina ? 'sealing' : 'other');
+                        @endphp
+                        <tr class="scale-prod-row" data-roll-dest="{{ $rowDest }}">
                             <td>
                                 <span class="text-white">{{ $prod->recorded_at ? $prod->recorded_at->format('d/m/Y') : '-' }}</span>
                                 <br><small class="text-white-50">{{ $prod->recorded_at ? $prod->recorded_at->format('h:i A') : '' }}</small>
@@ -143,6 +157,14 @@
                                 <div class="d-flex align-items-center gap-1 mt-1">
                                     @if($isBobina)
                                         <span class="badge bg-warning text-dark fw-bold" style="font-size: 10px;">🔄 BOBINA / X KG</span>
+                                        @php
+                                            $rollDest = $prod->metadata['roll_destination'] ?? 'sealing';
+                                        @endphp
+                                        @if($rollDest === 'sealing')
+                                            <span class="badge bg-primary text-white fw-bold" style="font-size: 10px;">✂️ PARA SELLADORA</span>
+                                        @else
+                                            <span class="badge bg-success text-white fw-bold" style="font-size: 10px;">📦 VENTA DIRECTA</span>
+                                        @endif
                                     @endif
                                     @if($prod->product && $prod->product->sku)
                                         <small class="text-white-50 font-monospace">SKU: {{ $prod->product->sku }}</small>
@@ -163,15 +185,18 @@
                             <td>
                                 @if($hasRolls)
                                     @php
-                                        $rollsList = isset($prod->metadata['rolls']) && is_array($prod->metadata['rolls'])
-                                            ? $prod->metadata['rolls']
-                                            : (isset($prod->metadata['roll']) && is_array($prod->metadata['roll'])
-                                                ? [$prod->metadata['roll']]
-                                                : (is_array($prod->metadata) ? $prod->metadata : []));
+                                        $rollsList = [];
+                                        if (isset($prod->metadata['rolls']) && is_array($prod->metadata['rolls'])) {
+                                            $rollsList = $prod->metadata['rolls'];
+                                        } elseif (isset($prod->metadata['roll']) && is_array($prod->metadata['roll'])) {
+                                            $rollsList = [$prod->metadata['roll']];
+                                        } elseif ($isBobina && (float)$prod->quantity <= 1) {
+                                            $rollsList = [['weight' => (float)$prod->weight, 'color' => $prod->product->material_type ?? '', 'batch' => '']];
+                                        }
                                     @endphp
                                     <div class="d-flex flex-column gap-1">
                                         @foreach($rollsList as $r)
-                                            @if(is_array($r))
+                                            @if(is_array($r) && isset($r['weight']))
                                                 <div class="p-1 px-2 bg-dark rounded border border-warning-subtle d-flex justify-content-between align-items-center" style="font-size: 11px;">
                                                     <span class="text-warning fw-bold"><i class="bi bi-disc me-1"></i> Bobina #{{ $loop->iteration }}:</span>
                                                     <strong class="text-white font-monospace">{{ number_format($r['weight'] ?? 0, 2) }} Kg</strong>
@@ -562,6 +587,23 @@ function recalcTotals(prodId) {
         document.getElementById('qtyInput' + prodId).value = count;
         document.getElementById('weightInput' + prodId).value = total.toFixed(2);
     }
+}
+
+function filterScaleTable(dest, btn) {
+    document.querySelectorAll('.filter-scale-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const rows = document.querySelectorAll('.scale-prod-row');
+    rows.forEach(r => {
+        const rowDest = r.getAttribute('data-roll-dest');
+        if (dest === 'all') {
+            r.style.display = '';
+        } else if (dest === 'sealing') {
+            r.style.display = (rowDest === 'sealing') ? '' : 'none';
+        } else if (dest === 'direct_sale') {
+            r.style.display = (rowDest === 'direct_sale') ? '' : 'none';
+        }
+    });
 }
 </script>
 @endsection

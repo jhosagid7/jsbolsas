@@ -232,6 +232,52 @@
                             </div>
                         </div>
                     </div>
+                @else
+                    {{-- BANDEJA DE BOBINAS DISPONIBLES EN PLANTA PARA SELLADORA --}}
+                    <div class="p-3 mb-3 rounded-3 border" style="background: #111827; border-color: #3b82f6 !important;">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-primary text-white fw-bold px-2 py-1 fs-6">✂️ BOBINAS LISTAS PARA SELLADO</span>
+                                <span class="text-white-50 small">Bobinas de manga continua listas para montar</span>
+                            </div>
+                            <span class="badge bg-dark border border-secondary text-info fw-normal">
+                                {{ $availableBobinas->count() }} bobina(s) en piso
+                            </span>
+                        </div>
+
+                        @if($availableBobinas->isEmpty())
+                            <div class="p-2 text-center text-white-50 small bg-dark rounded border border-secondary">
+                                <span>ℹ️ No hay bobinas pendientes de sellado registradas en planta actualmente.</span>
+                            </div>
+                        @else
+                            <div class="d-flex gap-2 overflow-auto pb-2" style="white-space: nowrap;">
+                                @foreach($availableBobinas as $bob)
+                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start" style="min-width: 240px; max-width: 280px; border-radius: 10px;">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <strong class="text-info text-truncate" style="font-size: 12px;" title="{{ $bob->product->name ?? 'Bobina' }}">
+                                                {{ $bob->product->name ?? 'Bobina Extrusión' }}
+                                            </strong>
+                                            <span class="badge bg-warning text-dark font-monospace" style="font-size: 11px;">
+                                                {{ number_format($bob->weight, 2) }} Kg
+                                            </span>
+                                        </div>
+                                        <div class="text-white-50 small d-flex flex-column gap-1" style="font-size: 11px;">
+                                            <span>
+                                                📏 <strong>{{ $bob->product?->getDimensionsCmFormatted() ?: 'Manga Continua' }}</strong>
+                                            </span>
+                                            <span>
+                                                🏷️ Lote: <code class="text-warning">{{ $bob->effective_batch_code }}</code>
+                                            </span>
+                                            <div class="d-flex justify-content-between text-white-50" style="font-size: 10px;">
+                                                <span>👤 {{ Str::limit($bob->user->name ?? 'Extrusor', 15) }}</span>
+                                                <span>🕒 {{ $bob->recorded_at ? $bob->recorded_at->format('d/m h:i A') : '' }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
                 @endif
 
                 @if($isExtrusionMachine)
@@ -273,18 +319,20 @@
 
                                 {{-- Calibre --}}
                                 <div class="col-6">
-                                    <label class="form-label text-white-50 small mb-1 fw-bold">Calibre (C):</label>
+                                    <label class="form-label text-white-50 small mb-1 fw-bold" title="Puedes escribir 15, 3 o 0.0150">
+                                        Calibre (C): <span class="text-info" style="font-size: 10px;">(ej: 15, 3)</span>
+                                    </label>
                                     <div class="input-group input-group-sm">
-                                        <input type="number" step="0.1" min="0.5" max="20" name="extrusion_caliber" id="extrusionCaliberInput"
+                                        <input type="number" step="any" min="0.0001" max="100" name="extrusion_caliber" id="extrusionCaliberInput"
                                                class="form-control bg-dark text-white border-secondary fw-bold fs-6 text-center"
-                                               value="3.0" required oninput="updateExtrusionPreview()">
+                                               value="3.0" placeholder="15 ó 0.0150" required oninput="updateExtrusionPreview()">
                                         <span class="input-group-text bg-secondary text-white fw-bold">C</span>
                                     </div>
                                 </div>
                             </div>
 
                             {{-- Tipo de Material & Fuelle --}}
-                            <div class="row g-2">
+                            <div class="row g-2 mb-2">
                                 <div class="col-6">
                                     <label class="form-label text-white-50 small mb-1 fw-bold">Material:</label>
                                     <select name="extrusion_material_type" id="extrusionMaterialSelect"
@@ -304,6 +352,17 @@
                                         <option value="1">Con Fuelle</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            {{-- Destino de la Bobina: Para Sellado vs Venta Directa --}}
+                            <div class="mb-2">
+                                <label class="form-label text-white-50 small mb-1 fw-bold">🎯 Destino de la Bobina:</label>
+                                <select name="roll_destination" id="rollDestinationSelect"
+                                        class="form-select form-select-sm bg-dark text-white border-primary fw-bold"
+                                        onchange="updateExtrusionPreview()">
+                                    <option value="sealing" selected>✂️ Para Selladora (Pasa a corte y confección)</option>
+                                    <option value="direct_sale">📦 Venta Directa / Despacho (Zanahoria, bobina final)</option>
+                                </select>
                             </div>
 
                             {{-- Campo condicional para cm de fuelle --}}

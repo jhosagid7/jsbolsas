@@ -231,4 +231,88 @@ class ExtrusionPhaseOneTest extends TestCase
         $this->assertStringContainsString('RECETA: RECETA CRISTAL ALTA DENSIDAD', $firstLabel['presentation_info']);
         $this->assertEquals(25.0, $firstLabel['weight_kg']);
     }
+
+    /** @test */
+    public function it_smartly_normalizes_decimal_calibers_to_commercial_format()
+    {
+        $productC15Decimal = BagProduct::create([
+            'name'                  => 'Manga 30 Plana',
+            'sku'                   => 'MANG-30-PL-DEC',
+            'width_inch'            => 30.0,
+            'gusset_cm'             => 0,
+            'gauge_caliber'         => 0.0150,
+            'unit_weight_kg'        => 25.0,
+            'sale_unit'             => 'BOBINA',
+            'is_variable_quantity'  => true,
+            'is_active'             => true,
+        ]);
+
+        $this->assertEquals('ANCHO: 30 cm | C-15', $productC15Decimal->getDimensionsCmFormatted());
+
+        $productC3 = BagProduct::create([
+            'name'                  => 'Manga 22 Plana',
+            'sku'                   => 'MANG-22-PL-3',
+            'width_inch'            => 22.0,
+            'gusset_cm'             => 0,
+            'gauge_caliber'         => 3.0,
+            'unit_weight_kg'        => 25.0,
+            'sale_unit'             => 'BOBINA',
+            'is_variable_quantity'  => true,
+            'is_active'             => true,
+        ]);
+
+        $this->assertEquals('ANCHO: 22 cm | C-3', $productC3->getDimensionsCmFormatted());
+    }
+
+    /** @test */
+    public function operator_can_set_roll_destination_for_sealing_and_direct_sale()
+    {
+        $shift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        // 1. Bobina para Selladora
+        $responseSealing = $this->actingAs($this->operator)->post(route('operator.store_batch'), [
+            'is_extrusion_direct'     => 1,
+            'extrusion_width_cm'      => 30,
+            'extrusion_has_gusset'    => 0,
+            'extrusion_material_type' => 'Baja Densidad',
+            'extrusion_caliber'       => '0.0150', // Debe normalizarse a C-15
+            'quantity'                => 1,
+            'weight'                  => 15.0,
+            'machine_id'              => $this->extruder->id,
+            'roll_destination'        => 'sealing',
+            'print_mode'              => 'save_only',
+        ]);
+
+        $responseSealing->assertRedirect();
+        $prodSealing = BagProduction::latest('id')->first();
+        $this->assertEquals('sealing', $prodSealing->metadata['roll_destination']);
+        $this->assertEquals(15.0, $prodSealing->metadata['rolls'][0]['weight']);
+        $this->assertEquals(15.0, $prodSealing->product->gauge_caliber);
+
+        // 2. Bobina Venta Directa (Zanahoria)
+        $responseDirect = $this->actingAs($this->operator)->post(route('operator.store_batch'), [
+            'is_extrusion_direct'     => 1,
+            'extrusion_width_cm'      => 40,
+            'extrusion_has_gusset'    => 0,
+            'extrusion_material_type' => 'Baja Densidad',
+            'extrusion_caliber'       => '3',
+            'quantity'                => 1,
+            'weight'                  => 28.0,
+            'machine_id'              => $this->extruder->id,
+            'roll_destination'        => 'direct_sale',
+            'print_mode'              => 'save_only',
+        ]);
+
+        $responseDirect->assertRedirect();
+        $prodDirect = BagProduction::latest('id')->first();
+        $this->assertEquals('direct_sale', $prodDirect->metadata['roll_destination']);
+        $this->assertEquals(28.0, $prodDirect->metadata['rolls'][0]['weight']);
+    }
 }
