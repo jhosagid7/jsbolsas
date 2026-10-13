@@ -222,6 +222,10 @@
                             </td>
                             <td class="text-end">
                                 <div class="d-inline-flex gap-1 align-items-center">
+                                    <a href="{{ route('ticket', ['id' => $prod->id, 'scope' => 'bulto']) }}" target="_blank"
+                                       class="btn btn-outline-info btn-sm fw-bold" title="Imprimir / Reimprimir Etiqueta Térmica">
+                                        <i class="bi bi-printer me-1"></i> Etiqueta
+                                    </a>
                                     <button class="btn btn-outline-warning btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#adjustModal{{ $prod->id }}">
                                         <i class="bi bi-pencil-square me-1"></i> Editar
                                     </button>

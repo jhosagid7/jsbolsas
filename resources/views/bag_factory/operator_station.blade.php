@@ -268,9 +268,12 @@
                                             <span>
                                                 🏷️ Lote: <code class="text-warning">{{ $bob->effective_batch_code }}</code>
                                             </span>
-                                            <div class="d-flex justify-content-between text-white-50" style="font-size: 10px;">
-                                                <span>👤 {{ Str::limit($bob->user->name ?? 'Extrusor', 15) }}</span>
-                                                <span>🕒 {{ $bob->recorded_at ? $bob->recorded_at->format('d/m h:i A') : '' }}</span>
+                                            <div class="d-flex justify-content-between align-items-center text-white-50 mt-1 pt-1 border-top border-secondary" style="font-size: 10px;">
+                                                <span>👤 {{ Str::limit($bob->user->name ?? 'Extrusor', 12) }}</span>
+                                                <a href="{{ route('ticket', ['id' => $bob->id, 'scope' => 'bulto']) }}" target="_blank"
+                                                   class="btn btn-outline-info btn-sm py-0 px-2 fw-bold" style="font-size: 10px;">
+                                                    🖨️ Etiqueta
+                                                </a>
                                             </div>
                                         </div>
                                     </div>
