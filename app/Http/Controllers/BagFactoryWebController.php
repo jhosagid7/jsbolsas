@@ -2072,9 +2072,20 @@ class BagFactoryWebController extends Controller
 
     public function labelAudits(Request $request)
     {
-        $query = BagProduction::where('status', 'approved')
-            ->with(['product', 'user', 'shift.user', 'shift.machine', 'reviewer', 'labelPrints.user'])
+        $status = $request->get('status', 'all');
+
+        $query = BagProduction::with(['product', 'user', 'shift.user', 'shift.machine', 'reviewer', 'labelPrints.user'])
+            ->where('is_waste_record', false)
             ->orderBy('recorded_at', 'desc');
+
+        if ($status === 'approved') {
+            $query->where('status', 'approved');
+        } elseif ($status === 'pending') {
+            $query->where('status', 'pending_review');
+        } else {
+            // 'all': Mostrar tanto aprobados como pre-cargados que ya tengan etiqueta o pesaje
+            $query->whereIn('status', ['approved', 'pending_review', 'lifted']);
+        }
 
         if ($request->filled('start_date')) {
             $query->whereDate('recorded_at', '>=', $request->start_date);

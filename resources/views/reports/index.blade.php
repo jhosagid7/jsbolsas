@@ -17,11 +17,11 @@
     <form action="{{ route('reports.index') }}" method="GET" class="row g-3 align-items-end">
         <div class="col-md-3">
             <label class="form-label small text-white-50">Fecha Desde</label>
-            <input type="date" name="start_date" class="form-control bg-dark text-white border-secondary" value="{{ request('start_date') }}">
+            <input type="date" name="start_date" class="form-control bg-dark text-white border-secondary" value="{{ request('start_date', now()->format('Y-m-d')) }}">
         </div>
         <div class="col-md-3">
             <label class="form-label small text-white-50">Fecha Hasta</label>
-            <input type="date" name="end_date" class="form-control bg-dark text-white border-secondary" value="{{ request('end_date') }}">
+            <input type="date" name="end_date" class="form-control bg-dark text-white border-secondary" value="{{ request('end_date', now()->format('Y-m-d')) }}">
         </div>
         <div class="col-md-2">
             <label class="form-label small text-white-50">Operario Fabricante</label>
@@ -203,6 +203,22 @@
                                 </td>
                                 <td>
                                     <span class="fw-bold text-info">{{ $p->product->name ?? 'Producto' }}</span>
+                                    @if($p->product)
+                                        @php
+                                            $dimStr = $p->product->getDimensionsCmFormatted();
+                                            $rollDest = $p->metadata['roll_destination'] ?? ($isRoll ? 'sealing' : null);
+                                        @endphp
+                                        @if($dimStr)
+                                            <span class="badge bg-dark border border-info text-info ms-1 font-monospace" style="font-size: 10px;">
+                                                📏 {{ $dimStr }}
+                                            </span>
+                                        @endif
+                                        @if($rollDest === 'sealing')
+                                            <span class="badge bg-primary text-white ms-1" style="font-size: 9px;">✂️ PARA SELLADORA</span>
+                                        @elseif($rollDest === 'direct_sale')
+                                            <span class="badge bg-success text-white ms-1" style="font-size: 9px;">📦 VENTA DIRECTA</span>
+                                        @endif
+                                    @endif
                                     @if($p->product && $p->product->sku)
                                         <br><small class="text-white-50">SKU: {{ $p->product->sku }}</small>
                                     @endif

@@ -91,13 +91,21 @@
     <form method="GET" action="{{ route('bag-factory.label-audits') }}" class="row g-2 align-items-end">
         <div class="col-md-3">
             <label class="form-label text-white-50 small fw-bold mb-1"><i class="bi bi-calendar-event me-1"></i>Fecha Desde</label>
-            <input type="date" name="start_date" class="form-control" value="{{ request('start_date') }}">
+            <input type="date" name="start_date" class="form-control" value="{{ request('start_date', now()->format('Y-m-d')) }}">
         </div>
         <div class="col-md-3">
             <label class="form-label text-white-50 small fw-bold mb-1"><i class="bi bi-calendar-check me-1"></i>Fecha Hasta</label>
-            <input type="date" name="end_date" class="form-control" value="{{ request('end_date') }}">
+            <input type="date" name="end_date" class="form-control" value="{{ request('end_date', now()->format('Y-m-d')) }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <label class="form-label text-white-50 small fw-bold mb-1"><i class="bi bi-funnel me-1"></i>Estado</label>
+            <select name="status" class="form-select">
+                <option value="all" {{ request('status', 'all') == 'all' ? 'selected' : '' }}>Todos (Aprobados y Pre-cargados)</option>
+                <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Solo Aprobados en Báscula</option>
+                <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Solo Pre-cargados</option>
+            </select>
+        </div>
+        <div class="col-md-2">
             <label class="form-label text-white-50 small fw-bold mb-1"><i class="bi bi-person-badge me-1"></i>Operario</label>
             <select name="user_id" class="form-select">
                 <option value="">Todos los Operarios</option>
@@ -106,11 +114,11 @@
                 @endforeach
             </select>
         </div>
-        <div class="col-md-3 d-flex gap-2">
+        <div class="col-md-2 d-flex gap-2">
             <button type="submit" class="btn btn-primary fw-bold flex-grow-1">
                 <i class="bi bi-funnel-fill me-1"></i> Filtrar
             </button>
-            <a href="{{ route('bag-factory.label-audits') }}" class="btn btn-outline-secondary">
+            <a href="{{ route('bag-factory.label-audits') }}" class="btn btn-outline-secondary" title="Limpiar Filtros">
                 <i class="bi bi-arrow-counterclockwise"></i>
             </a>
         </div>
@@ -152,7 +160,22 @@
                         </td>
                         <td>
                             <strong class="text-white d-block">{{ $p->product?->name ?? 'Producto Eliminado' }}</strong>
-                            <span class="badge bg-dark text-info border border-secondary font-monospace" style="font-size: 10px;">{{ $p->product?->sku ?? 'S/SKU' }}</span>
+                            <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                                <span class="badge bg-dark text-info border border-secondary font-monospace" style="font-size: 10px;">{{ $p->product?->sku ?? 'S/SKU' }}</span>
+                                @if($p->product && $p->product->getDimensionsCmFormatted())
+                                    <span class="badge bg-dark border border-info text-info font-monospace" style="font-size: 10px;">
+                                        📏 {{ $p->product->getDimensionsCmFormatted() }}
+                                    </span>
+                                @endif
+                                @php
+                                    $dest = $p->metadata['roll_destination'] ?? null;
+                                @endphp
+                                @if($dest === 'sealing')
+                                    <span class="badge bg-primary text-white" style="font-size: 9px;">✂️ PARA SELLADORA</span>
+                                @elseif($dest === 'direct_sale')
+                                    <span class="badge bg-success text-white" style="font-size: 9px;">📦 VENTA DIRECTA</span>
+                                @endif
+                            </div>
                         </td>
                         <td>
                             <div class="text-info small fw-bold"><i class="bi bi-person-fill me-1"></i>{{ $p->shift?->user?->name ?? $p->user?->name ?? 'Operario' }}</div>
@@ -194,11 +217,17 @@
                             @endif
                         </td>
                         <td class="text-end">
-                            <button type="button" class="btn btn-outline-info btn-sm fw-bold shadow-sm" 
-                                data-bs-toggle="modal" 
-                                data-bs-target="#modalAuditDetail-{{ $p->id }}">
-                                <i class="bi bi-search me-1"></i> Desglose
-                            </button>
+                            <div class="d-inline-flex gap-1">
+                                <a href="{{ route('ticket', ['id' => $p->id, 'scope' => 'bulto']) }}" target="_blank"
+                                   class="btn btn-outline-info btn-sm fw-bold shadow-sm" title="Reimprimir Etiqueta Térmica">
+                                    🖨️ Etiqueta
+                                </a>
+                                <button type="button" class="btn btn-outline-light btn-sm fw-bold shadow-sm" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#modalAuditDetail-{{ $p->id }}">
+                                    <i class="bi bi-search me-1"></i> Auditoría
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 @empty
