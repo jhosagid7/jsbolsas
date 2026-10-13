@@ -194,11 +194,51 @@
                     <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
                 @endif
 
+                @php
+                    $isExtrusionMachine = ($activeShift->machine && $activeShift->machine->type === 'extrusora');
+                @endphp
+
+                @if($isExtrusionMachine)
+                    {{-- PANEL DE CONTROL DE EXTRUSIÓN: RECETA Y MERMA DE PURGA --}}
+                    <div class="p-3 mb-3 rounded-3 border" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%); border-color: rgba(56, 189, 248, 0.4) !important;">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-info text-dark fw-bold px-2 py-1 fs-6">🌀 MÓDULO EXTRUSORA</span>
+                                <span class="text-white small fw-bold">Manga Continua & Bobinado</span>
+                            </div>
+                            <button type="button" class="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm"
+                                    data-bs-toggle="modal" data-bs-target="#wasteRecordModal">
+                                <span>⚠️</span> Registrar Merma / Purga de Calibración
+                            </button>
+                        </div>
+                        <div class="row g-2 align-items-center">
+                            <div class="col-12 col-md-7">
+                                <label class="form-label text-white-50 small mb-1 fw-bold">
+                                    🧪 Fórmula / Receta de Mezcla Activa:
+                                </label>
+                                <select name="production_formula_id" id="productionFormulaSelect" class="form-select bg-dark text-white border-info fw-bold">
+                                    <option value="">-- Usar Fórmula Predeterminada del Producto --</option>
+                                    @foreach($formulas as $form)
+                                        <option value="{{ $form->id }}">
+                                            🧪 {{ $form->name }} ({{ $form->code ?? 'S/C' }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <div class="small text-white-50 p-2 rounded bg-black bg-opacity-30 border border-secondary mt-md-3">
+                                    <span>💡 Las etiquetas reflejarán las dimensiones técnicas en <strong>Centímetros (cm)</strong> y la receta empleada.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 <div class="row g-3">
                     {{-- Columna 1: Selección de Producto / Medida --}}
                     <div class="col-12 col-lg-5">
                         <label class="form-label text-white fw-bold small d-flex justify-content-between align-items-center mb-1">
-                            <span>1. Medida / Producto:</span>
+                            <span>1. {{ $isExtrusionMachine ? 'Manga / Medida de Bobina:' : 'Medida / Producto:' }}</span>
                             <span class="badge bg-secondary text-white" id="selectedProductBadge">Ninguna medida seleccionada</span>
                         </label>
 
@@ -384,96 +424,139 @@
                     </thead>
                     <tbody>
                         @forelse($shiftProductions as $prod)
-                            <tr>
-                                <td class="ps-3 font-monospace text-white-50">
-                                    {{ $prod->recorded_at ? $prod->recorded_at->format('h:i A') : '--' }}
-                                </td>
-                                <td>
-                                    <strong class="text-white">{{ $prod->product->name ?? 'Bolsa' }}</strong>
-                                    <span class="text-white-50 small d-block">{{ $prod->product->sku ?? '' }}</span>
-                                </td>
-                                <td>
-                                    <span class="badge bg-dark font-monospace text-warning border border-secondary">
-                                        {{ $prod->effective_batch_code }}
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    @if($prod->is_printed)
-                                        <span class="badge bg-success bg-opacity-25 text-success border border-success fw-normal px-2 py-1"
-                                              title="Etiqueta física emitida: Registro sellado">
-                                            ✓ Impreso
+                            @if($prod->is_waste_record)
+                                <tr class="table-active bg-warning bg-opacity-10">
+                                    <td class="ps-3 font-monospace text-white-50">
+                                        {{ $prod->recorded_at ? $prod->recorded_at->format('h:i A') : '--' }}
+                                    </td>
+                                    <td>
+                                        <strong class="text-warning">⚠️ PURGA / MERMA DE CALIBRACIÓN</strong>
+                                        <span class="text-white-50 small d-block">
+                                            {{ $prod->formula ? 'Fórmula: ' . $prod->formula->name : 'Extrusión' }}
                                         </span>
-                                    @else
-                                        <span class="badge bg-warning bg-opacity-25 text-warning border border-warning fw-normal px-2 py-1"
-                                              title="Sin imprimir: Editable por operario">
-                                            ⏳ Pre-cargado
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-dark font-monospace text-warning border border-warning">
+                                            MERMA-PURGA
                                         </span>
-                                    @endif
-                                </td>
-                                <td class="text-center fw-bold text-white">
-                                    {{ (int)$prod->quantity }}
-                                </td>
-                                <td class="text-center font-monospace">
-                                    {{ number_format($prod->weight, 2) }} Kg
-                                </td>
-                                <td class="text-center font-monospace text-info">
-                                    {{ $prod->quantity > 0 ? number_format($prod->weight / $prod->quantity, 3) : '--' }} Kg
-                                </td>
-                                <td class="text-center">
-                                    @php $grade = strtoupper($prod->weight_quality_grade ?: 'B'); @endphp
-                                    @if($grade === 'A')
-                                        <span class="badge bg-warning text-dark fw-bold">🟡 GRADO A (Sobrepeso)</span>
-                                    @elseif($grade === 'C')
-                                        <span class="badge bg-danger text-white fw-bold">🔴 GRADO C (Subcalibre)</span>
-                                    @else
-                                        <span class="badge bg-success text-white fw-bold">🟢 GRADO B (Óptimo)</span>
-                                    @endif
-                                </td>
-                                <td class="text-center font-monospace fw-bold text-success">
-                                    +${{ number_format($prod->labor_earned_amount, 2) }}
-                                </td>
-                                <td class="text-end pe-3">
-                                    <div class="d-flex justify-content-end align-items-center gap-1">
-                                        {{-- Botón Imprimir / Etiquetas --}}
-                                        <a href="{{ route('ticket', ['id' => $prod->id, 'scope' => 'bulto']) }}"
-                                           class="btn {{ $prod->is_printed ? 'btn-outline-warning' : 'btn-success' }} btn-sm fw-bold"
-                                           title="{{ $prod->is_printed ? 'Reimprimir etiqueta' : 'Imprimir y sellar etiqueta' }}">
-                                            🖨️ {{ $prod->is_printed ? 'Etiquetas' : 'Imprimir' }}
-                                        </a>
-
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary text-white px-2 py-1">Registrado</span>
+                                    </td>
+                                    <td class="text-center text-white-50">--</td>
+                                    <td class="text-center font-monospace text-warning fw-bold">
+                                        {{ number_format($prod->waste_weight_kg, 2) }} Kg
+                                    </td>
+                                    <td class="text-center text-white-50">--</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning text-dark fw-bold">MERMA / PURGA</span>
+                                    </td>
+                                    <td class="text-center text-white-50 font-monospace">$0.00</td>
+                                    <td class="text-end pe-3">
                                         @if(!$prod->is_printed || Auth::user()->role === 'admin')
-                                            {{-- Botón Editar (Solo precargado o admin) --}}
-                                            <button type="button" 
-                                                    class="btn btn-outline-info btn-sm"
-                                                    title="Editar pesaje pre-cargado"
-                                                    onclick="openEditBatchModal(this)"
-                                                    data-id="{{ $prod->id }}"
-                                                    data-product-name="{{ $prod->product->name ?? 'Bolsa' }}"
-                                                    data-quantity="{{ (float)$prod->quantity }}"
-                                                    data-weight="{{ (float)$prod->weight }}">
-                                                ✏️
-                                            </button>
-
-                                            {{-- Botón Eliminar (Solo precargado o admin) --}}
                                             <form action="{{ route('operator.destroy_batch', $prod->id) }}" method="POST" class="d-inline"
-                                                  onsubmit="return confirm('¿Estás seguro de eliminar este pesaje pre-cargado de {{ (int)$prod->quantity }} millares?');">
+                                                  onsubmit="return confirm('¿Estás seguro de eliminar este registro de merma de {{ number_format($prod->waste_weight_kg, 2) }} Kg?');">
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Eliminar pesaje pre-cargado">
+                                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Eliminar merma">
                                                     🗑️
                                                 </button>
                                             </form>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @else
+                                <tr>
+                                    <td class="ps-3 font-monospace text-white-50">
+                                        {{ $prod->recorded_at ? $prod->recorded_at->format('h:i A') : '--' }}
+                                    </td>
+                                    <td>
+                                        <strong class="text-white">{{ $prod->product->name ?? 'Bolsa' }}</strong>
+                                        <span class="text-white-50 small d-block">{{ $prod->product->sku ?? '' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-dark font-monospace text-warning border border-secondary">
+                                            {{ $prod->effective_batch_code }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if($prod->is_printed)
+                                            <span class="badge bg-success bg-opacity-25 text-success border border-success fw-normal px-2 py-1"
+                                                  title="Etiqueta física emitida: Registro sellado">
+                                                ✓ Impreso
+                                            </span>
                                         @else
-                                            {{-- Candado de Bloqueo Industrial --}}
-                                            <span class="badge bg-secondary bg-opacity-50 text-white-50 px-2 py-1 border border-secondary" 
-                                                  style="font-size: 11px; cursor: help;"
-                                                  title="Sellado con etiqueta física. Si hubo un error, consulte al Jefe de Operaciones.">
-                                                🔒 Sellado
+                                            <span class="badge bg-warning bg-opacity-25 text-warning border border-warning fw-normal px-2 py-1"
+                                                  title="Sin imprimir: Editable por operario">
+                                                ⏳ Pre-cargado
                                             </span>
                                         @endif
-                                    </div>
-                                </td>
-                            </tr>
+                                    </td>
+                                    <td class="text-center fw-bold text-white">
+                                        {{ (int)$prod->quantity }}
+                                    </td>
+                                    <td class="text-center font-monospace">
+                                        {{ number_format($prod->weight, 2) }} Kg
+                                    </td>
+                                    <td class="text-center font-monospace text-info">
+                                        {{ $prod->quantity > 0 ? number_format($prod->weight / $prod->quantity, 3) : '--' }} Kg
+                                    </td>
+                                    <td class="text-center">
+                                        @php $grade = strtoupper($prod->weight_quality_grade ?: 'B'); @endphp
+                                        @if($grade === 'A')
+                                            <span class="badge bg-warning text-dark fw-bold">🟡 GRADO A (Sobrepeso)</span>
+                                        @elseif($grade === 'C')
+                                            <span class="badge bg-danger text-white fw-bold">🔴 GRADO C (Subcalibre)</span>
+                                        @else
+                                            <span class="badge bg-success text-white fw-bold">🟢 GRADO B (Óptimo)</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center font-monospace fw-bold text-success">
+                                        +${{ number_format($prod->labor_earned_amount, 2) }}
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <div class="d-flex justify-content-end align-items-center gap-1">
+                                            {{-- Botón Imprimir / Etiquetas --}}
+                                            <a href="{{ route('ticket', ['id' => $prod->id, 'scope' => 'bulto']) }}"
+                                               class="btn {{ $prod->is_printed ? 'btn-outline-warning' : 'btn-success' }} btn-sm fw-bold"
+                                               title="{{ $prod->is_printed ? 'Reimprimir etiqueta' : 'Imprimir y sellar etiqueta' }}">
+                                                🖨️ {{ $prod->is_printed ? 'Etiquetas' : 'Imprimir' }}
+                                            </a>
+
+                                            @if(!$prod->is_printed || Auth::user()->role === 'admin')
+                                                {{-- Botón Editar (Solo precargado o admin) --}}
+                                                <button type="button" 
+                                                        class="btn btn-outline-info btn-sm"
+                                                        title="Editar pesaje pre-cargado"
+                                                        onclick="openEditBatchModal(this)"
+                                                        data-id="{{ $prod->id }}"
+                                                        data-product-name="{{ $prod->product->name ?? 'Bolsa' }}"
+                                                        data-quantity="{{ (float)$prod->quantity }}"
+                                                        data-weight="{{ (float)$prod->weight }}">
+                                                    ✏️
+                                                </button>
+
+                                                {{-- Botón Eliminar (Solo precargado o admin) --}}
+                                                <form action="{{ route('operator.destroy_batch', $prod->id) }}" method="POST" class="d-inline"
+                                                      onsubmit="return confirm('¿Estás seguro de eliminar este pesaje pre-cargado de {{ (int)$prod->quantity }} millares?');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Eliminar pesaje pre-cargado">
+                                                        🗑️
+                                                    </button>
+                                                </form>
+                                            @else
+                                                {{-- Candado de Bloqueo Industrial --}}
+                                                <span class="badge bg-secondary bg-opacity-50 text-white-50 px-2 py-1 border border-secondary" 
+                                                      style="font-size: 11px; cursor: help;"
+                                                      title="Sellado con etiqueta física. Si hubo un error, consulte al Jefe de Operaciones.">
+                                                    🔒 Sellado
+                                                </span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <tr>
                                 <td colspan="10" class="text-center py-4 text-white-50">
@@ -1022,6 +1105,55 @@
                 <div class="modal-footer border-secondary py-2">
                     <button type="button" class="btn btn-secondary btn-sm fw-bold" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-primary btn-sm fw-bold px-3">💾 Guardar Corrección</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- MODAL PARA REGISTRAR MERMA / PURGA DE CALIBRACIÓN (EXTRUSIÓN) --}}
+<div class="modal fade" id="wasteRecordModal" tabindex="-1" aria-labelledby="wasteRecordModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-white" style="background: #1e293b; border: 1px solid #f59e0b; border-radius: 14px;">
+            <div class="modal-header border-secondary py-3">
+                <h5 class="modal-title fw-bold d-flex align-items-center gap-2 text-warning" id="wasteRecordModalLabel">
+                    <span>⚠️</span> Registrar Merma / Purga de Calibración
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form action="{{ route('operator.store_batch') }}" method="POST">
+                @csrf
+                <input type="hidden" name="is_waste_record" value="1">
+                <input type="hidden" name="machine_id" value="{{ $activeShift?->machine_id }}">
+                @if(!$user->isOperator())
+                    <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
+                @endif
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning border-0 bg-opacity-25 bg-warning text-warning small py-2 px-3 mb-3">
+                        <span>ℹ️</span> <strong>Purga de Boquilla / Calibración:</strong> Registra los kilogramos de material fundido descartado durante el ajuste del calibre o arranque de la extrusora.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-white-50 small fw-bold">🧪 Fórmula de Mezcla Usada:</label>
+                        <select name="production_formula_id" class="form-select bg-dark text-white border-secondary">
+                            <option value="">-- Sin Fórmula Específica --</option>
+                            @foreach($formulas as $form)
+                                <option value="{{ $form->id }}">{{ $form->name }} ({{ $form->code ?? 'S/C' }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-white fw-bold small">⚖️ Kilos de Merma / Purga (Kg):</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-warning text-dark fw-bold">Kg</span>
+                            <input type="number" step="0.01" min="0.01" max="1000" name="waste_weight_kg" class="form-control bg-dark text-warning border-warning fw-bold fs-4 text-center" placeholder="0.00" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary py-2">
+                    <button type="button" class="btn btn-secondary btn-sm fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning btn-sm fw-bold px-3">⚠️ Guardar Registro de Merma</button>
                 </div>
             </form>
         </div>

@@ -1613,14 +1613,27 @@ class BagFactoryWebController extends Controller
         if ($isVariable) {
             $isComposite = ($qty > 1 || (bool)$prod->product?->is_composite_rolls || count($rolls) > 1);
 
+            // Dimensiones técnicas en cm y Fórmula de Extrusión
+            $dimsCm = $prod->product?->getDimensionsCmFormatted();
+            $formulaName = $prod->formula?->name ?? $prod->product?->formula?->name;
+            $bobinaHeader = $prod->product?->material_type ? "MANGA " . strtoupper($prod->product->material_type) : "BOBINA DE EXTRUSIÓN";
+
             if ($scope === 'bulto' && $isComposite) {
                 // Etiqueta Master de Bulto de Bobinas
+                $pres = "1 BULTO ({$qty} BOBINAS)";
+                if ($dimsCm) {
+                    $pres .= " | " . $dimsCm;
+                }
+                if ($formulaName) {
+                    $pres .= " | RECETA: " . mb_strtoupper($formulaName, 'UTF-8');
+                }
+
                 $labels[] = [
                     'id'                => $prod->id,
                     'index'             => 1,
                     'total_in_batch'    => 1,
                     'product_name'      => $prodName,
-                    'presentation_info' => "1 BULTO ({$qty} BOBINAS)",
+                    'presentation_info' => $pres,
                     'operator_name'     => $operatorName,
                     'production_date'   => $prodDate,
                     'approver_name'     => $approverName,
@@ -1640,12 +1653,20 @@ class BagFactoryWebController extends Controller
                 $currentIndex = 1;
 
                 // 1. Master Bulto
+                $presMaster = "1 BULTO ({$qty} BOBINAS)";
+                if ($dimsCm) {
+                    $presMaster .= " | " . $dimsCm;
+                }
+                if ($formulaName) {
+                    $presMaster .= " | RECETA: " . mb_strtoupper($formulaName, 'UTF-8');
+                }
+
                 $labels[] = [
                     'id'                => $prod->id,
                     'index'             => $currentIndex,
                     'total_in_batch'    => $totalLabels,
                     'product_name'      => $prodName,
-                    'presentation_info' => "1 BULTO ({$qty} BOBINAS)",
+                    'presentation_info' => $presMaster,
                     'operator_name'     => $operatorName,
                     'production_date'   => $prodDate,
                     'approver_name'     => $approverName,
@@ -1667,12 +1688,17 @@ class BagFactoryWebController extends Controller
                         ? (float)$rolls[$i]['weight']
                         : round($totalWeight / $qty, 2);
 
+                    $presHija = $dimsCm ? $dimsCm : "BOBINA - PESO VARIABLE";
+                    if ($formulaName) {
+                        $presHija .= " | " . mb_strtoupper($formulaName, 'UTF-8');
+                    }
+
                     $labels[] = [
                         'id'                => $prod->id,
                         'index'             => $currentIndex,
                         'total_in_batch'    => $totalLabels,
                         'product_name'      => "{$prodName} - BOBINA " . ($i + 1) . "/{$qty}",
-                        'presentation_info' => "BOBINA - PESO VARIABLE",
+                        'presentation_info' => $presHija,
                         'operator_name'     => $operatorName,
                         'production_date'   => $prodDate,
                         'approver_name'     => $approverName,
@@ -1694,7 +1720,11 @@ class BagFactoryWebController extends Controller
                         ? (float)$rolls[$i]['weight']
                         : ($qty > 1 ? round($totalWeight / $qty, 2) : $totalWeight);
 
-                    $presentation = ($qty > 1 ? "BOBINA #" . ($i + 1) . " - PESO VARIABLE" : "BOBINA - PESO VARIABLE");
+                    $presentation = $dimsCm ? $dimsCm : ($qty > 1 ? "BOBINA #" . ($i + 1) . " - PESO VARIABLE" : "BOBINA - PESO VARIABLE");
+                    if ($formulaName) {
+                        $presentation .= " | RECETA: " . mb_strtoupper($formulaName, 'UTF-8');
+                    }
+
                     $qrCode = ($i === 0 && !empty($prod->qr_code) && $qty === 1)
                         ? $prod->qr_code
                         : ($qty > 1 ? "{$baseQr}-R" . ($i + 1) : $baseQr);
@@ -2278,7 +2308,11 @@ class BagFactoryWebController extends Controller
                 'tariff'      => round($tariff, 2),
             ];
         })->values();
+
         $productsCatalogJson = json_encode($productsCatalog);
+
+        // Fórmulas de mezcla activas para extrusión
+        $formulas = ProductionFormula::where('is_active', true)->orderBy('name')->get();
 
         return view('bag_factory.operator_station', compact(
             'user',
@@ -2287,6 +2321,7 @@ class BagFactoryWebController extends Controller
             'machines',
             'products',
             'productsCatalogJson',
+            'formulas',
             'shiftProductions',
             'totalEarnedUsd',
             'combinedProgressPercent',
@@ -2299,12 +2334,15 @@ class BagFactoryWebController extends Controller
     public function operatorStoreBatch(Request $request)
     {
         $request->validate([
-            'product_id'  => 'required|exists:bag_products,id',
-            'quantity'    => 'required|numeric|min:0.01',
-            'weight'      => 'required|numeric|min:0.01',
-            'machine_id'  => 'nullable|exists:bag_machines,id',
-            'print_mode'  => 'nullable|string|in:save_only,direct_print',
-            'operator_id' => 'nullable|exists:users,id',
+            'product_id'            => 'nullable|exists:bag_products,id',
+            'quantity'              => 'nullable|numeric|min:0',
+            'weight'                => 'nullable|numeric|min:0',
+            'machine_id'            => 'nullable|exists:bag_machines,id',
+            'production_formula_id' => 'nullable|exists:production_formulas,id',
+            'waste_weight_kg'       => 'nullable|numeric|min:0',
+            'is_waste_record'       => 'nullable|boolean',
+            'print_mode'            => 'nullable|string|in:save_only,direct_print',
+            'operator_id'           => 'nullable|exists:users,id',
         ]);
 
         $user = Auth::user();
@@ -2330,10 +2368,62 @@ class BagFactoryWebController extends Controller
             ]);
         }
 
-        $product = BagProduct::findOrFail($request->product_id);
-        $qty = (float)$request->quantity;
-        $weight = (float)$request->weight;
         $machineId = $request->machine_id ?: $shift->machine_id;
+        $isWasteRecord = (bool)$request->boolean('is_waste_record');
+        $wasteWeight = (float)($request->waste_weight_kg ?: 0);
+        $formulaId = $request->filled('production_formula_id') ? (int)$request->production_formula_id : null;
+
+        // --- FLUJO ESPECIAL: REGISTRO DE MERMA / PURGA DE CALIBRACIÓN DE EXTRUSIÓN ---
+        if ($isWasteRecord || ($wasteWeight > 0 && !$request->filled('product_id'))) {
+            $wasteKg = $wasteWeight > 0 ? $wasteWeight : (float)$request->weight;
+            
+            $production = BagProduction::create([
+                'bag_shift_id'             => $shift->id,
+                'user_id'                  => $targetUser->id,
+                'product_id'               => $request->product_id ?: null,
+                'production_formula_id'    => $formulaId,
+                'machine_id'               => $machineId,
+                'quantity'                 => 0,
+                'weight'                   => 0,
+                'original_weight'          => 0,
+                'waste_weight_kg'          => $wasteKg,
+                'is_waste_record'          => true,
+                'recorded_at'              => now(),
+                'status'                   => 'pending_review',
+                'is_printed'               => false,
+                'weight_quality_grade'     => 'MERMA',
+                'weight_deviation_percent' => 0,
+                'completed_packages_count' => 0,
+                'fractional_units'         => 0,
+                'is_package_completed'     => false,
+                'labor_earned_amount'      => 0.00,
+                'labor_retained_amount'    => 0.00,
+                'qr_code'                  => 'WASTE-' . strtoupper(Str::random(10)),
+                'sync_id'                  => 'PROD-WASTE-' . Str::uuid(),
+                'metadata'                 => [
+                    'waste_type'             => 'purga_calibracion_extrusion',
+                    'production_formula_id'  => $formulaId,
+                    'recorded_by'            => $user->name,
+                ],
+            ]);
+
+            $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
+            return redirect()->route('operator.station', $redirectParams)->with('warning', "⚠️ Merma/Purga de calibración de {$wasteKg} Kg registrada correctamente.");
+        }
+
+        // --- FLUJO ESTÁNDAR: PESAJE DE PRODUCCIÓN / BOBINAS ---
+        if (!$request->filled('product_id')) {
+            return redirect()->back()->with('error', 'Debe seleccionar una medida o producto para registrar la producción.');
+        }
+
+        $product = BagProduct::findOrFail($request->product_id);
+        $qty = max(0.01, (float)$request->quantity);
+        $weight = max(0.01, (float)$request->weight);
+
+        // Si no se envió fórmula explícita en el request, heredar la fórmula asociada al producto si tiene
+        if (!$formulaId && $product->production_formula_id) {
+            $formulaId = $product->production_formula_id;
+        }
 
         // Auto-sanitización si ingresó en gramos (> 500g y producto estándar)
         if ($weight >= 500 && !$product->is_variable_quantity) {
@@ -2377,6 +2467,8 @@ class BagFactoryWebController extends Controller
             'applied_fraction_tariff' => $fractionTariff,
             'batch_entry_mode'        => 'multi_pack_scale',
             'average_weight_per_unit' => $qty > 0 ? round($weight / $qty, 4) : $weight,
+            'production_formula_id'   => $formulaId,
+            'waste_weight_kg'         => $wasteWeight,
         ];
 
         $isDirectPrint = ($request->get('print_mode') === 'direct_print');
@@ -2385,10 +2477,13 @@ class BagFactoryWebController extends Controller
             'bag_shift_id'             => $shift->id,
             'user_id'                  => $targetUser->id,
             'product_id'               => $product->id,
+            'production_formula_id'    => $formulaId,
             'machine_id'               => $machineId,
             'quantity'                 => $qty,
             'weight'                   => $weight,
             'original_weight'          => $weight,
+            'waste_weight_kg'          => $wasteWeight,
+            'is_waste_record'          => false,
             'recorded_at'              => now(),
             'status'                   => 'pending_review',
             'is_printed'               => $isDirectPrint,
@@ -2409,8 +2504,9 @@ class BagFactoryWebController extends Controller
             return redirect()->route('ticket', ['id' => $production->id, 'scope' => 'bulto', 'auto_print' => 1]);
         }
 
+        $unitLabel = $product->is_variable_quantity ? "bobina(s)" : "millares";
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
-        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje de {$qty} millares registrado correctamente ({$production->weight_grade_label})");
+        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje de {$qty} {$unitLabel} registrado correctamente ({$production->weight_grade_label})");
     }
 
     public function operatorUpdateBatch(Request $request, $id)

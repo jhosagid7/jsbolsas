@@ -22,6 +22,8 @@ class BagProduct extends Model
         'millar_per_bulto',
         'width_inch',
         'length_inch',
+        'gusset_cm',
+        'material_type',
         'gauge_caliber',
         'unit_weight_kg',
         'real_total_weight_kg',
@@ -44,6 +46,7 @@ class BagProduct extends Model
         'millar_per_bulto'            => 'decimal:4',
         'width_inch'                  => 'decimal:2',
         'length_inch'                 => 'decimal:2',
+        'gusset_cm'                   => 'decimal:2',
         'gauge_caliber'               => 'decimal:4',
         'unit_weight_kg'              => 'decimal:4',
         'real_total_weight_kg'        => 'decimal:4',
@@ -512,5 +515,30 @@ class BagProduct extends Model
         }
 
         return $m;
+    }
+
+
+    /**
+     * Retorna las dimensiones técnicas formateadas en Centímetros (cm)
+     */
+    public function getDimensionsCmFormatted(): string
+    {
+        $parts = [];
+        $width = (float)($this->width_inch ?? 0);
+        if ($width > 0) {
+            $parts[] = "ANCHO: " . round($width, 1) . " cm";
+        }
+
+        $gusset = (float)($this->gusset_cm ?? 0);
+        if ($gusset > 0) {
+            $parts[] = "FUELLE: " . round($gusset, 1) . " cm";
+        }
+
+        $caliber = (float)($this->gauge_caliber ?? 0);
+        if ($caliber > 0) {
+            $parts[] = "C-" . round($caliber, 1);
+        }
+
+        return implode(' | ', $parts);
     }
 }

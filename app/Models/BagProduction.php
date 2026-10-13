@@ -18,9 +18,12 @@ class BagProduction extends Model
         'bag_shift_id',
         'user_id',
         'product_id',
+        'production_formula_id',
         'machine_id',
         'quantity',
         'weight',
+        'waste_weight_kg',
+        'is_waste_record',
         'recorded_at',
         'status',
         'reviewed_by',
@@ -51,8 +54,11 @@ class BagProduction extends Model
         'lifted_at'                => 'datetime',
         'printed_at'               => 'datetime',
         'is_printed'               => 'boolean',
+        'is_waste_record'          => 'boolean',
+        'production_formula_id'    => 'integer',
         'quantity'                 => 'decimal:2',
         'weight'                   => 'decimal:4',
+        'waste_weight_kg'          => 'decimal:4',
         'original_weight'          => 'decimal:4',
         'weight_deviation_percent' => 'decimal:2',
         'completed_packages_count' => 'decimal:2',
@@ -105,6 +111,11 @@ class BagProduction extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(BagProduct::class, 'product_id');
+    }
+
+    public function formula(): BelongsTo
+    {
+        return $this->belongsTo(ProductionFormula::class, 'production_formula_id');
     }
 
     public function incidents(): HasMany
