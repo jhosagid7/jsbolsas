@@ -105,6 +105,51 @@ class ExtrusionPhaseOneTest extends TestCase
     }
 
     /** @test */
+    public function operator_can_store_direct_extrusion_bobina_without_selecting_finished_bag()
+    {
+        $shift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        $response = $this->actingAs($this->operator)
+            ->post('/operario/produccion/batch', [
+                'machine_id'             => $this->extruder->id,
+                'is_extrusion_direct'    => 1,
+                'extrusion_width_cm'     => 22.0,
+                'extrusion_has_gusset'   => 1,
+                'extrusion_gusset_cm'    => 5.0,
+                'extrusion_caliber'      => 3.0,
+                'extrusion_material_type'=> 'Baja Densidad',
+                'quantity'               => 1,
+                'weight'                 => 25.5,
+                'production_formula_id'  => $this->formula->id,
+                'print_mode'             => 'save_only',
+            ]);
+
+        $response->assertRedirect(route('operator.station'));
+
+        $this->assertDatabaseHas('bag_products', [
+            'width_inch' => 22.0,
+            'gusset_cm'  => 5.0,
+            'sale_unit'  => 'BOBINA',
+        ]);
+
+        $this->assertDatabaseHas('bag_productions', [
+            'bag_shift_id'          => $shift->id,
+            'user_id'               => $this->operator->id,
+            'production_formula_id' => $this->formula->id,
+            'weight'                => 25.5,
+            'quantity'              => 1,
+            'is_waste_record'       => false,
+        ]);
+    }
+
+    /** @test */
     public function operator_can_record_calibration_waste_merma()
     {
         $shift = BagShift::create([

@@ -2590,13 +2590,63 @@ class BagFactoryWebController extends Controller
             return redirect()->route('operator.station', $redirectParams)->with('warning', "⚠️ Merma/Purga de calibración de {$wasteKg} Kg registrada correctamente.");
         }
 
-        // --- FLUJO ESTÁNDAR: PESAJE DE PRODUCCIÓN / BOBINAS ---
-        if (!$request->filled('product_id')) {
-            return redirect()->back()->with('error', 'Debe seleccionar una medida o producto para registrar la producción.');
+        // --- FLUJO ESPECIAL EXTRUSIÓN DIRECTA: BOBINA DE MANGA CONTINUA ---
+        $isExtrusionDirect = $request->boolean('is_extrusion_direct') || ($request->filled('extrusion_width_cm') && (float)$request->extrusion_width_cm > 0);
+
+        if ($isExtrusionDirect) {
+            $widthCm = round((float)$request->extrusion_width_cm, 1);
+            $hasGusset = $request->get('extrusion_has_gusset') === '1' || $request->boolean('extrusion_has_gusset');
+            $gussetCm = $hasGusset ? round((float)($request->extrusion_gusset_cm ?: 0), 1) : 0.0;
+            $caliber = (float)($request->extrusion_caliber ?: 3.0);
+            $matType = trim($request->extrusion_material_type ?: 'Baja Densidad');
+            if ($hasGusset) {
+                $matType .= ' Con Fuelle';
+            } else {
+                $matType .= ' Plana';
+            }
+
+            // Generar o reutilizar el producto técnico de bobina para esta especificación
+            $mangaSku = 'BOB-' . str_replace('.', '_', (string)$widthCm) . ($gussetCm > 0 ? ('-F' . str_replace('.', '_', (string)$gussetCm)) : '-PL');
+            $mangaName = "BOBINA MANGA {$widthCm} CM" . ($gussetCm > 0 ? " (FUELLE {$gussetCm} CM)" : " PLANA");
+
+            $product = BagProduct::firstOrCreate(
+                ['sku' => $mangaSku],
+                [
+                    'name'                  => $mangaName,
+                    'category'              => 'Bobina Extrusión',
+                    'material_type'         => $matType,
+                    'width_inch'            => $widthCm,
+                    'gusset_cm'             => $gussetCm,
+                    'gauge_caliber'         => $caliber,
+                    'unit_weight_kg'        => 25.0,
+                    'millar_per_bulto'      => 1.0,
+                    'sale_unit'             => 'BOBINA',
+                    'is_variable_quantity'  => true,
+                    'is_active'             => true,
+                    'production_formula_id' => $formulaId,
+                    'target_units_per_shift'=> 5,
+                ]
+            );
+
+            // Asegurar que si ya existía mantenga sus dimensiones actualizadas
+            if ((float)$product->width_inch !== $widthCm || (float)$product->gusset_cm !== $gussetCm) {
+                $product->update([
+                    'width_inch'    => $widthCm,
+                    'gusset_cm'     => $gussetCm,
+                    'gauge_caliber' => $caliber,
+                    'material_type' => $matType,
+                ]);
+            }
+        } else {
+            // --- FLUJO ESTÁNDAR: PRODUCTO SELECCIONADO ---
+            if (!$request->filled('product_id')) {
+                return redirect()->back()->with('error', 'Debe seleccionar una medida o producto para registrar la producción.');
+            }
+
+            $product = BagProduct::findOrFail($request->product_id);
         }
 
-        $product = BagProduct::findOrFail($request->product_id);
-        $qty = max(0.01, (float)$request->quantity);
+        $qty = max(0.01, (float)($request->quantity ?: 1));
         $weight = max(0.01, (float)$request->weight);
 
         // Si no se envió fórmula explícita en el request, heredar la fórmula asociada al producto si tiene

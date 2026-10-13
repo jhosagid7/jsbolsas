@@ -234,131 +234,254 @@
                     </div>
                 @endif
 
-                <div class="row g-3">
-                    {{-- Columna 1: Selección de Producto / Medida --}}
-                    <div class="col-12 col-lg-5">
-                        <label class="form-label text-white fw-bold small d-flex justify-content-between align-items-center mb-1">
-                            <span>1. {{ $isExtrusionMachine ? 'Manga / Medida de Bobina:' : 'Medida / Producto:' }}</span>
-                            <span class="badge bg-secondary text-white" id="selectedProductBadge">Ninguna medida seleccionada</span>
-                        </label>
+                @if($isExtrusionMachine)
+                    {{-- MODO EXTRUSORA: MANGA CONTINUA & PARÁMETROS TÉCNICOS DIRECTOS --}}
+                    <input type="hidden" name="is_extrusion_direct" value="1">
+                    <input type="hidden" name="product_id" id="selectedProductId" value="">
 
-                        {{-- Accesos Rápidos de Medidas Populares --}}
-                        <div class="d-flex flex-wrap gap-1 mb-2">
-                            <span class="text-white-50 small align-self-center me-1" style="font-size: 10px;">Frecuentes:</span>
-                            @foreach($products->take(6) as $fastProd)
-                                <button type="button" class="btn btn-outline-secondary btn-sm text-truncate text-white fast-prod-btn py-0 px-2"
-                                        style="font-size: 11px; max-width: 140px; border-radius: 6px;"
-                                        onclick="selectProductById({{ $fastProd->id }})">
-                                    {{ $fastProd->name }}
-                                </button>
-                            @endforeach
-                        </div>
-
-                        {{-- Buscador Inteligente Reactivo --}}
-                        <div class="position-relative mb-2" id="smartProductSearchWrapper">
-                            <div class="input-group input-group-lg">
-                                <span class="input-group-text bg-dark border-secondary text-info">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text"
-                                       id="productSearchInput"
-                                       class="form-control bg-dark text-white border-secondary fw-bold"
-                                       placeholder="🔍 Escribe medida o nombre (ej: 40x60, cristal, negra)..."
-                                       autocomplete="off"
-                                       autocorrect="off"
-                                       spellcheck="false"
-                                       onfocus="openProductDropdown()"
-                                       oninput="handleSearchInput(this.value)"
-                                       onkeydown="handleSearchKeydown(event)">
-                                <button type="button" 
-                                        class="btn btn-outline-secondary d-none text-white" 
-                                        id="clearSearchBtn" 
-                                        onclick="clearProductSearch()" 
-                                        title="Limpiar búsqueda">
-                                    <i class="bi bi-x-lg"></i>
-                                </button>
-                            </div>
-
-                            {{-- Dropdown Flotante Reactivo con Resultados --}}
-                            <div id="productDropdownList"
-                                 class="position-absolute w-100 bg-dark border border-info rounded-3 shadow-lg d-none mt-1 p-0"
-                                 style="z-index: 1050; max-height: 380px; overflow-y: auto; box-shadow: 0 12px 30px rgba(0,0,0,0.85) !important;">
-                            </div>
-                        </div>
-
-                        {{-- Input Hidden para envío del Formulario --}}
-                        <input type="hidden" name="product_id" id="selectedProductId" value="" required>
-
-                        {{-- Select Oculto de Respaldo para Compatibilidad --}}
-                        <select id="productSelect" style="display: none;" tabindex="-1" aria-hidden="true">
-                            <option value="">-- Seleccionar Medida o Producto --</option>
-                            @foreach($products as $p)
-                                <option value="{{ $p->id }}"
-                                        data-theoretical="{{ (float)($p->unit_weight_kg > 0 ? $p->unit_weight_kg : 1.0) }}"
-                                        data-target="{{ (int)($p->target_units_per_shift ?: 5) }}"
-                                        data-millar="{{ (float)($p->millar_per_bulto ?: 1) }}"
-                                        data-variable="{{ $p->is_variable_quantity ? '1' : '0' }}">
-                                    {{ $p->name }}
-                                </option>
-                            @endforeach
-                        </select>
-
-                        {{-- Ficha Informativa del Producto Seleccionado --}}
-                        <div class="p-2 rounded bg-dark border border-secondary text-white-50 small mt-2" id="productSpecsBox" style="font-size: 11px;">
-                            <div class="d-flex justify-content-between">
-                                <span>Peso Teórico por Millar:</span>
-                                <strong class="text-white" id="specTheoreticalWeight">-- Kg</strong>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Meta por Turno:</span>
-                                <strong class="text-white" id="specShiftTarget">-- millares</strong>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Pago estimado por millar:</span>
-                                <strong class="text-success font-monospace" id="specTariffPerUnit">-- USD</strong>
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- Columna 2: Cantidad (Multi-millar) & Peso en Báscula --}}
-                    <div class="col-12 col-lg-4">
-                        {{-- Cantidad de Millares --}}
-                        <div class="mb-3">
-                            <label class="form-label text-white fw-bold small">
-                                2. Cantidad de Millares en la Báscula:
+                    <div class="row g-3">
+                        {{-- Columna 1: Medidas Técnicas de Manga Continua --}}
+                        <div class="col-12 col-lg-5">
+                            <label class="form-label text-white fw-bold small d-flex justify-content-between align-items-center mb-1">
+                                <span>1. Medida de Manga Continua:</span>
+                                <span class="badge bg-info text-dark fw-bold" id="extrusionSpecBadge">Manga 22 cm Plana</span>
                             </label>
-                            <div class="input-group input-group-lg">
-                                <input type="number" step="1" min="1" max="500" name="quantity" id="quantityInput"
-                                       class="form-control bg-dark text-white border-secondary text-center fw-bold fs-4"
-                                       value="10" required oninput="recalcGrading()">
-                                <span class="input-group-text bg-secondary text-white fw-bold">Millares</span>
+
+                            {{-- Botones Rápidos de Anchos Frecuentes en cm --}}
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <span class="text-white-50 small align-self-center me-1" style="font-size: 10px;">Anchos cm:</span>
+                                @foreach([15, 18, 20, 22, 25, 30, 35, 40, 50] as $fastWidth)
+                                    <button type="button" class="btn btn-outline-info btn-sm py-0 px-2 fw-bold fast-width-btn {{ $fastWidth === 22 ? 'active' : '' }}"
+                                            style="font-size: 11px; border-radius: 6px;"
+                                            onclick="setExtrusionWidth({{ $fastWidth }})">
+                                        {{ $fastWidth }} cm
+                                    </button>
+                                @endforeach
                             </div>
-                            {{-- Botones Rápidos de Lotes --}}
-                            <div class="d-flex gap-1 mt-1">
-                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(1)">1</button>
-                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(5)">5</button>
-                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold active" id="btnQty10" onclick="setQty(10)">10</button>
-                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(15)">15</button>
-                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(20)">20</button>
-                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(25)">25</button>
+
+                            <div class="row g-2 mb-2">
+                                {{-- Ancho en cm --}}
+                                <div class="col-6">
+                                    <label class="form-label text-white-50 small mb-1 fw-bold">Ancho (cm):</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.5" min="5" max="250" name="extrusion_width_cm" id="extrusionWidthInput"
+                                               class="form-control bg-dark text-white border-info fw-bold fs-6 text-center"
+                                               value="22" required oninput="updateExtrusionPreview()">
+                                        <span class="input-group-text bg-secondary text-white fw-bold">cm</span>
+                                    </div>
+                                </div>
+
+                                {{-- Calibre --}}
+                                <div class="col-6">
+                                    <label class="form-label text-white-50 small mb-1 fw-bold">Calibre (C):</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.1" min="0.5" max="20" name="extrusion_caliber" id="extrusionCaliberInput"
+                                               class="form-control bg-dark text-white border-secondary fw-bold fs-6 text-center"
+                                               value="3.0" required oninput="updateExtrusionPreview()">
+                                        <span class="input-group-text bg-secondary text-white fw-bold">C</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Tipo de Material & Fuelle --}}
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label text-white-50 small mb-1 fw-bold">Material:</label>
+                                    <select name="extrusion_material_type" id="extrusionMaterialSelect"
+                                            class="form-select form-select-sm bg-dark text-white border-secondary fw-bold"
+                                            onchange="updateExtrusionPreview()">
+                                        <option value="Baja Densidad" selected>Baja Densidad</option>
+                                        <option value="Alta Densidad">Alta Densidad</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-6">
+                                    <label class="form-label text-white-50 small mb-1 fw-bold">Fuelle:</label>
+                                    <select name="extrusion_has_gusset" id="extrusionGussetSelect"
+                                            class="form-select form-select-sm bg-dark text-white border-secondary fw-bold"
+                                            onchange="toggleExtrusionGusset(this.value)">
+                                        <option value="0" selected>Sin Fuelle (Plana)</option>
+                                        <option value="1">Con Fuelle</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {{-- Campo condicional para cm de fuelle --}}
+                            <div class="mt-2 d-none" id="extrusionGussetCmWrapper">
+                                <label class="form-label text-warning small mb-1 fw-bold">Medida de Fuelle (cm por lado):</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" step="0.5" min="1" max="50" name="extrusion_gusset_cm" id="extrusionGussetInput"
+                                           class="form-control bg-dark text-warning border-warning fw-bold text-center"
+                                           value="5" oninput="updateExtrusionPreview()">
+                                    <span class="input-group-text bg-secondary text-white fw-bold">cm</span>
+                                </div>
                             </div>
                         </div>
 
-                        {{-- Peso Global de Báscula --}}
-                        <div>
-                            <label class="form-label text-white fw-bold small d-flex justify-content-between">
-                                <span>3. Peso Total en Báscula (Kg):</span>
-                                <span class="text-warning small">Pesar fardo completo</span>
-                            </label>
-                            <div class="input-group input-group-lg">
-                                <span class="input-group-text bg-warning text-dark fw-bold">⚖️</span>
-                                <input type="number" step="0.01" min="0.01" max="2000" name="weight" id="weightInput"
-                                       class="form-control bg-dark text-warning border-warning text-center fw-bold fs-3"
-                                       placeholder="0.00" required oninput="recalcGrading()">
-                                <span class="input-group-text bg-secondary text-white fw-bold">Kg</span>
+                        {{-- Columna 2: Cantidad de Bobinas & Peso en Báscula --}}
+                        <div class="col-12 col-lg-4">
+                            {{-- Cantidad de Bobinas --}}
+                            <div class="mb-3">
+                                <label class="form-label text-white fw-bold small">
+                                    2. Cantidad de Bobinas en la Báscula:
+                                </label>
+                                <div class="input-group input-group-lg">
+                                    <input type="number" step="1" min="1" max="50" name="quantity" id="quantityInput"
+                                           class="form-control bg-dark text-white border-secondary text-center fw-bold fs-4"
+                                           value="1" required oninput="recalcGrading()">
+                                    <span class="input-group-text bg-secondary text-white fw-bold">Bobina(s)</span>
+                                </div>
+                                <div class="d-flex gap-1 mt-1">
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold active" id="btnQty1" onclick="setQty(1)">1 Bobina</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(2)">2</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(3)">3</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(4)">4</button>
+                                </div>
+                            </div>
+
+                            {{-- Peso Global de Báscula --}}
+                            <div>
+                                <label class="form-label text-white fw-bold small d-flex justify-content-between">
+                                    <span>3. Peso de la Bobina en Báscula (Kg):</span>
+                                    <span class="text-warning small">Pesar rollo completo</span>
+                                </label>
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text bg-warning text-dark fw-bold">⚖️</span>
+                                    <input type="number" step="0.01" min="0.01" max="2000" name="weight" id="weightInput"
+                                           class="form-control bg-dark text-warning border-warning text-center fw-bold fs-3"
+                                           placeholder="0.00" required oninput="recalcGrading()">
+                                    <span class="input-group-text bg-secondary text-white fw-bold">Kg</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                @else
+                    {{-- MODO SELLADORA / CONVERSIÓN: CATÁLOGO DE BOLSAS TERMINADAS --}}
+                    <div class="row g-3">
+                        {{-- Columna 1: Selección de Producto / Medida --}}
+                        <div class="col-12 col-lg-5">
+                            <label class="form-label text-white fw-bold small d-flex justify-content-between align-items-center mb-1">
+                                <span>1. Medida / Producto:</span>
+                                <span class="badge bg-secondary text-white" id="selectedProductBadge">Ninguna medida seleccionada</span>
+                            </label>
+
+                            {{-- Accesos Rápidos de Medidas Populares --}}
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <span class="text-white-50 small align-self-center me-1" style="font-size: 10px;">Frecuentes:</span>
+                                @foreach($products->take(6) as $fastProd)
+                                    <button type="button" class="btn btn-outline-secondary btn-sm text-truncate text-white fast-prod-btn py-0 px-2"
+                                            style="font-size: 11px; max-width: 140px; border-radius: 6px;"
+                                            onclick="selectProductById({{ $fastProd->id }})">
+                                        {{ $fastProd->name }}
+                                    </button>
+                                @endforeach
+                            </div>
+
+                            {{-- Buscador Inteligente Reactivo --}}
+                            <div class="position-relative mb-2" id="smartProductSearchWrapper">
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text bg-dark border-secondary text-info">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text"
+                                           id="productSearchInput"
+                                           class="form-control bg-dark text-white border-secondary fw-bold"
+                                           placeholder="🔍 Escribe medida o nombre (ej: 40x60, cristal, negra)..."
+                                           autocomplete="off"
+                                           autocorrect="off"
+                                           spellcheck="false"
+                                           onfocus="openProductDropdown()"
+                                           oninput="handleSearchInput(this.value)"
+                                           onkeydown="handleSearchKeydown(event)">
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary d-none text-white" 
+                                            id="clearSearchBtn" 
+                                            onclick="clearProductSearch()" 
+                                            title="Limpiar búsqueda">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+
+                                {{-- Dropdown Flotante Reactivo con Resultados --}}
+                                <div id="productDropdownList"
+                                     class="position-absolute w-100 bg-dark border border-info rounded-3 shadow-lg d-none mt-1 p-0"
+                                     style="z-index: 1050; max-height: 380px; overflow-y: auto; box-shadow: 0 12px 30px rgba(0,0,0,0.85) !important;">
+                                </div>
+                            </div>
+
+                            {{-- Input Hidden para envío del Formulario --}}
+                            <input type="hidden" name="product_id" id="selectedProductId" value="" required>
+
+                            {{-- Select Oculto de Respaldo para Compatibilidad --}}
+                            <select id="productSelect" style="display: none;" tabindex="-1" aria-hidden="true">
+                                <option value="">-- Seleccionar Medida o Producto --</option>
+                                @foreach($products as $p)
+                                    <option value="{{ $p->id }}"
+                                            data-theoretical="{{ (float)($p->unit_weight_kg > 0 ? $p->unit_weight_kg : 1.0) }}"
+                                            data-target="{{ (int)($p->target_units_per_shift ?: 5) }}"
+                                            data-millar="{{ (float)($p->millar_per_bulto ?: 1) }}"
+                                            data-variable="{{ $p->is_variable_quantity ? '1' : '0' }}">
+                                        {{ $p->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            {{-- Ficha Informativa del Producto Seleccionado --}}
+                            <div class="p-2 rounded bg-dark border border-secondary text-white-50 small mt-2" id="productSpecsBox" style="font-size: 11px;">
+                                <div class="d-flex justify-content-between">
+                                    <span>Peso Teórico por Millar:</span>
+                                    <strong class="text-white" id="specTheoreticalWeight">-- Kg</strong>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>Meta por Turno:</span>
+                                    <strong class="text-white" id="specShiftTarget">-- millares</strong>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>Pago estimado por millar:</span>
+                                    <strong class="text-success font-monospace" id="specTariffPerUnit">-- USD</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Columna 2: Cantidad (Multi-millar) & Peso en Báscula --}}
+                        <div class="col-12 col-lg-4">
+                            {{-- Cantidad de Millares --}}
+                            <div class="mb-3">
+                                <label class="form-label text-white fw-bold small">
+                                    2. Cantidad de Millares en la Báscula:
+                                </label>
+                                <div class="input-group input-group-lg">
+                                    <input type="number" step="1" min="1" max="500" name="quantity" id="quantityInput"
+                                           class="form-control bg-dark text-white border-secondary text-center fw-bold fs-4"
+                                           value="10" required oninput="recalcGrading()">
+                                    <span class="input-group-text bg-secondary text-white fw-bold">Millares</span>
+                                </div>
+                                {{-- Botones Rápidos de Lotes --}}
+                                <div class="d-flex gap-1 mt-1">
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(1)">1</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(5)">5</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold active" id="btnQty10" onclick="setQty(10)">10</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(15)">15</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(20)">20</button>
+                                    <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="setQty(25)">25</button>
+                                </div>
+                            </div>
+
+                            {{-- Peso Global de Báscula --}}
+                            <div>
+                                <label class="form-label text-white fw-bold small d-flex justify-content-between">
+                                    <span>3. Peso Total en Báscula (Kg):</span>
+                                    <span class="text-warning small">Pesar fardo completo</span>
+                                </label>
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text bg-warning text-dark fw-bold">⚖️</span>
+                                    <input type="number" step="0.01" min="0.01" max="2000" name="weight" id="weightInput"
+                                           class="form-control bg-dark text-warning border-warning text-center fw-bold fs-3"
+                                           placeholder="0.00" required oninput="recalcGrading()">
+                                    <span class="input-group-text bg-secondary text-white fw-bold">Kg</span>
+                                </div>
+                            </div>
+                        </div>
+                @endif
 
                     {{-- Columna 3: Monitor de Calidad (Grado A, B, C) y Acción --}}
                     <div class="col-12 col-lg-3 d-flex flex-column justify-content-between">
@@ -942,6 +1065,46 @@
         }
     });
 
+    const isExtrusionMachineMode = {{ $isExtrusionMachine ? 'true' : 'false' }};
+
+    function setExtrusionWidth(val) {
+        const input = document.getElementById('extrusionWidthInput');
+        if (input) {
+            input.value = val;
+            updateExtrusionPreview();
+        }
+        document.querySelectorAll('.fast-width-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.textContent.trim() === `${val} cm`);
+        });
+    }
+
+    function toggleExtrusionGusset(val) {
+        const wrapper = document.getElementById('extrusionGussetCmWrapper');
+        if (wrapper) {
+            if (val === '1') {
+                wrapper.classList.remove('d-none');
+            } else {
+                wrapper.classList.add('d-none');
+            }
+        }
+        updateExtrusionPreview();
+    }
+
+    function updateExtrusionPreview() {
+        if (!isExtrusionMachineMode) return;
+        const width = parseFloat(document.getElementById('extrusionWidthInput')?.value) || 22;
+        const caliber = parseFloat(document.getElementById('extrusionCaliberInput')?.value) || 3.0;
+        const hasGusset = document.getElementById('extrusionGussetSelect')?.value === '1';
+        const gusset = hasGusset ? (parseFloat(document.getElementById('extrusionGussetInput')?.value) || 0) : 0;
+        const mat = document.getElementById('extrusionMaterialSelect')?.value || 'Baja Densidad';
+
+        const badge = document.getElementById('extrusionSpecBadge');
+        if (badge) {
+            badge.textContent = `Manga ${width} cm ${hasGusset ? ('Fuelle ' + gusset + ' cm') : 'Plana'} (${mat} C-${caliber})`;
+        }
+        recalcGrading();
+    }
+
     function recalcGrading() {
         const qty = parseFloat(document.getElementById('quantityInput')?.value) || 0;
         const weight = parseFloat(document.getElementById('weightInput')?.value) || 0;
@@ -952,6 +1115,27 @@
         const earnBox = document.getElementById('estimatedEarnBox');
 
         if (!badge || !details || !card || !earnBox) return;
+
+        if (isExtrusionMachineMode) {
+            if (weight <= 0) {
+                badge.innerHTML = '<span class="badge bg-secondary text-white">COLOCA EL PESO DE LA BOBINA</span>';
+                details.textContent = 'Bobina en báscula: 0.00 Kg';
+                earnBox.textContent = 'Bobinado en curso';
+                card.style.borderColor = '#334155';
+                return;
+            }
+
+            const width = parseFloat(document.getElementById('extrusionWidthInput')?.value) || 22;
+            const hasGusset = document.getElementById('extrusionGussetSelect')?.value === '1';
+            const gusset = hasGusset ? (parseFloat(document.getElementById('extrusionGussetInput')?.value) || 0) : 0;
+            const avgWeight = qty > 0 ? (weight / qty) : weight;
+
+            badge.innerHTML = '<span class="badge bg-info text-dark fw-bold fs-6">🌀 BOBINA DE EXTRUSIÓN</span>';
+            details.innerHTML = `Manga: <strong>${width} cm</strong> ${hasGusset ? ('(Fuelle: ' + gusset + ' cm)') : 'Plana'} • <strong>${weight.toFixed(2)} Kg</strong>`;
+            earnBox.textContent = `+ ${qty} Bobina(s) registradas (${avgWeight.toFixed(2)} Kg/u)`;
+            card.style.borderColor = '#0284c7';
+            return;
+        }
 
         if (!activeProduct || qty <= 0 || weight <= 0) {
             badge.innerHTML = '<span class="badge bg-secondary text-white">COLOCA EL PESO</span>';
@@ -998,9 +1182,28 @@
     }
 
     function submitBatch(mode) {
+        const qty = parseFloat(document.getElementById('quantityInput')?.value) || 0;
+        const weight = parseFloat(document.getElementById('weightInput')?.value) || 0;
+
+        if (isExtrusionMachineMode) {
+            const width = parseFloat(document.getElementById('extrusionWidthInput')?.value) || 0;
+            if (width <= 0) {
+                alert('Por favor indica el ancho de la manga en centímetros.');
+                document.getElementById('extrusionWidthInput')?.focus();
+                return;
+            }
+            if (weight <= 0) {
+                alert('Por favor ingresa el peso de la bobina en báscula.');
+                document.getElementById('weightInput')?.focus();
+                return;
+            }
+
+            document.getElementById('printModeInput').value = mode;
+            document.getElementById('batchProductionForm').submit();
+            return;
+        }
+
         const prodId = document.getElementById('selectedProductId').value;
-        const qty = parseFloat(document.getElementById('quantityInput').value) || 0;
-        const weight = parseFloat(document.getElementById('weightInput').value) || 0;
 
         if (!prodId) {
             alert('Por favor selecciona una medida o producto usando el buscador.');
@@ -1025,6 +1228,13 @@
         document.getElementById('printModeInput').value = mode;
         document.getElementById('batchProductionForm').submit();
     }
+
+    // Inicializar vista al cargar la página
+    document.addEventListener('DOMContentLoaded', function() {
+        if (isExtrusionMachineMode) {
+            updateExtrusionPreview();
+        }
+    });
 
     // Modal de edición rápida para pesajes precargados
     function openEditBatchModal(btn) {
