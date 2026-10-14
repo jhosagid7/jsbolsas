@@ -2556,9 +2556,18 @@ class BagFactoryWebController extends Controller
                 $q->whereNull('metadata->roll_destination')
                   ->orWhere('metadata->roll_destination', '!=', 'direct_sale');
             })
+            ->where(function ($q) {
+                // Que no esté marcada explícitamente como consumida
+                $q->whereNull('metadata->is_consumed')
+                  ->orWhere('metadata->is_consumed', false);
+            })
             ->orderBy('recorded_at', 'desc')
-            ->take(20)
-            ->get();
+            ->take(30)
+            ->get()
+            ->filter(function ($bob) {
+                return $bob->remaining_weight > 0.05;
+            })
+            ->values();
 
         $isExtrusionMachine = (bool)($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
         $mountedBobina = $activeShift?->mounted_bobina;
@@ -3088,5 +3097,39 @@ class BagFactoryWebController extends Controller
 
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
         return redirect()->route('operator.station', $redirectParams)->with('info', 'Bobina desmontada del portarrollos.');
+    }
+
+    /**
+     * Marcar una bobina como agotada / finalizada y desmontarla si está montada
+     */
+    public function operatorMarkBobinaConsumed(Request $request)
+    {
+        $request->validate([
+            'bobina_id'   => 'nullable|exists:bag_productions,id',
+            'shift_id'    => 'nullable|exists:bag_shifts,id',
+            'operator_id' => 'nullable|exists:users,id',
+        ]);
+
+        $user = Auth::user();
+        $targetUserId = (!$user->isOperator() && $request->filled('operator_id'))
+            ? (int)$request->operator_id
+            : $user->id;
+
+        $shift = $request->filled('shift_id')
+            ? BagShift::findOrFail($request->shift_id)
+            : BagShift::where('user_id', $targetUserId)->where('status', 'open')->first();
+
+        $bobinaId = $request->bobina_id ?? $shift?->mounted_bobina_id;
+        if ($bobinaId) {
+            $bobina = BagProduction::find($bobinaId);
+            $bobina?->markAsConsumed();
+        }
+
+        if ($shift && (int)$shift->mounted_bobina_id === (int)$bobinaId) {
+            $shift->unmountBobina();
+        }
+
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
+        return redirect()->route('operator.station', $redirectParams)->with('success', '✅ Bobina marcada como agotada/terminada y retirada de la selladora.');
     }
 }

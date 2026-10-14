@@ -308,6 +308,57 @@ class BagProduction extends Model
     }
 
     /**
+     * Kilos consumidos de esta bobina en operaciones de sellado (bolsas + merma)
+     */
+    public function getConsumedWeightAttribute(): float
+    {
+        $derived = BagProduction::where('metadata->source_bobina_id', $this->id)
+            ->where('id', '!=', $this->id)
+            ->get();
+
+        $consumed = 0.0;
+        foreach ($derived as $item) {
+            $consumed += (float)$item->weight;
+            if ((float)$item->waste_weight_kg > 0) {
+                $consumed += (float)$item->waste_weight_kg;
+            }
+        }
+
+        return round($consumed, 2);
+    }
+
+    /**
+     * Kilos remanentes disponibles en la bobina
+     */
+    public function getRemainingWeightAttribute(): float
+    {
+        $initial = (float)($this->original_weight ?: $this->weight);
+        return max(0.0, round($initial - $this->consumed_weight, 2));
+    }
+
+    /**
+     * Indica si la bobina ya se considera agotada (por saldo <= 50g o marcada explícitamente)
+     */
+    public function getIsConsumedAttribute(): bool
+    {
+        if (!empty($this->metadata['is_consumed'])) {
+            return true;
+        }
+        return $this->remaining_weight <= 0.05;
+    }
+
+    /**
+     * Marcar la bobina como agotada / finalizada
+     */
+    public function markAsConsumed(): void
+    {
+        $meta = is_array($this->metadata) ? $this->metadata : (json_decode($this->metadata ?? '', true) ?: []);
+        $meta['is_consumed'] = true;
+        $meta['consumed_at'] = now()->toDateTimeString();
+        $this->update(['metadata' => $meta]);
+    }
+
+    /**
      * Check if production is locked for regular operators (printed / physically stickered).
      */
     public function getIsLockedForOperatorAttribute(): bool

@@ -128,6 +128,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/operario/turno/cerrar', [BagFactoryWebController::class, 'operatorCloseShift'])->name('operator.close_shift');
     Route::post('/operario/bobina/montar', [BagFactoryWebController::class, 'operatorMountBobina'])->name('operator.mount_bobina');
     Route::post('/operario/bobina/desmontar', [BagFactoryWebController::class, 'operatorUnmountBobina'])->name('operator.unmount_bobina');
+    Route::post('/operario/bobina/agotar', [BagFactoryWebController::class, 'operatorMarkBobinaConsumed'])->name('operator.mark_bobina_consumed');
 });
 
 require __DIR__ . '/auth.php';

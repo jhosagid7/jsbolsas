@@ -9,12 +9,12 @@ use App\Models\BagProduction;
 use App\Models\BagShift;
 use App\Models\ProductionFormula;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class ExtrusionPhaseOneTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected User $operator;
     protected BagMachine $extruder;
@@ -421,10 +421,45 @@ class ExtrusionPhaseOneTest extends TestCase
         $ticketResponse->assertSee('BOBINA ORIGEN:');
         $ticketResponse->assertSee($bobina->effective_batch_code);
 
-        // 8. Sellador puede desmontar la bobina al terminarla
+        // 8. Verificar cálculo dinámico de Saldo y Consumo en la Bobina Madre (20 kg inicial - 5 kg sellados = 15 kg)
+        $bobina->refresh();
+        $this->assertEquals(5.0, $bobina->consumed_weight);
+        $this->assertEquals(15.0, $bobina->remaining_weight);
+        $this->assertFalse($bobina->is_consumed);
+
+        // 9. Verificar que en la estación del operario se muestre el saldo de 15.00 Kg y el botón desmontar
+        $stationView = $this->actingAs($sealer)->get(route('operator.station'));
+        $stationView->assertStatus(200);
+        $stationView->assertSee('Saldo: 15.00 Kg');
+        $stationView->assertSee('Desmontar');
+        $stationView->assertSee('Agotar');
+
+        // 10. Sellador puede desmontar la bobina y esta queda disponible en piso con su saldo de 15 Kg
         $unmountResponse = $this->actingAs($sealer)->post(route('operator.unmount_bobina'));
         $unmountResponse->assertRedirect(route('operator.station'));
         $shift->refresh();
         $this->assertNull($shift->mounted_bobina_id);
+
+        // 11. Sellador puede volver a montarla si lo desea
+        $remountResponse = $this->actingAs($sealer)->post(route('operator.mount_bobina'), [
+            'bobina_id' => $bobina->id,
+        ]);
+        $remountResponse->assertRedirect(route('operator.station'));
+        $shift->refresh();
+        $this->assertEquals($bobina->id, $shift->mounted_bobina_id);
+
+        // 12. Sellador puede marcar la bobina como agotada/terminada al acabarse
+        $agotarResponse = $this->actingAs($sealer)->post(route('operator.mark_bobina_consumed'), [
+            'bobina_id' => $bobina->id,
+        ]);
+        $agotarResponse->assertRedirect(route('operator.station'));
+        $shift->refresh();
+        $this->assertNull($shift->mounted_bobina_id);
+        $bobina->refresh();
+        $this->assertTrue($bobina->is_consumed);
+
+        // 13. La bobina agotada ya no aparece en la bandeja de bobinas disponibles
+        $stationAfterAgotar = $this->actingAs($sealer)->get(route('operator.station'));
+        $stationAfterAgotar->assertDontSee('Lote: ' . $bobina->effective_batch_code);
     }
 }

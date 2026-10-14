@@ -264,31 +264,51 @@
                             @php
                                 $mProduct = $mountedBobina->product;
                                 $mWidth = (float)($mProduct?->width_inch ?? 0);
+                                $mInitW = (float)($mountedBobina->original_weight ?: $mountedBobina->weight);
+                                $mRemW = (float)$mountedBobina->remaining_weight;
+                                $mConsW = (float)$mountedBobina->consumed_weight;
+                                $mPct = $mInitW > 0 ? min(100, round(($mConsW / $mInitW) * 100)) : 100;
+                                $mBadgeClass = $mRemW <= 1.0 ? 'bg-danger text-white' : ($mRemW <= 3.0 ? 'bg-warning text-dark' : 'bg-success text-dark');
                             @endphp
-                            <div class="p-2 mb-3 rounded border border-success bg-dark d-flex justify-content-between align-items-center flex-wrap gap-2 shadow-sm" style="background: rgba(16, 185, 129, 0.08) !important;">
-                                <div class="d-flex align-items-center gap-3">
+                            <div class="p-3 mb-3 rounded border border-success bg-dark d-flex justify-content-between align-items-center flex-wrap gap-2 shadow-sm" style="background: rgba(16, 185, 129, 0.08) !important;">
+                                <div class="d-flex align-items-center gap-3 flex-wrap">
                                     <span class="badge bg-success text-dark fs-6 fw-bold px-2 py-1">
-                                        ⚙️ BOBINA MONTADA EN MÁQUINA
+                                        ⚙️ BOBINA MONTADA
                                     </span>
                                     <div class="text-white small">
                                         <strong class="text-warning fs-6">{{ $mProduct?->name ?? 'Bobina Extruida' }}</strong>
                                         <span class="text-white-50 ms-2 font-monospace">📏 {{ $mProduct?->getDimensionsCmFormatted() ?: 'Manga Continua' }}</span>
                                         <span class="badge bg-dark border border-warning text-warning ms-2 font-monospace">Lote: {{ $mountedBobina->effective_batch_code }}</span>
                                         <span class="badge bg-info text-dark ms-1">Extrusor: {{ $mountedBobina->user?->name ?? 'Operador' }}</span>
-                                        <span class="badge bg-secondary ms-1">{{ number_format($mountedBobina->weight, 2) }} Kg</span>
+                                        <span class="badge {{ $mBadgeClass }} ms-2 fs-6 fw-bold shadow-sm" title="Saldo disponible para sellar">
+                                            Saldo: {{ number_format($mRemW, 2) }} Kg
+                                        </span>
+                                        <span class="text-white-50 ms-1" style="font-size: 11px;">
+                                            (Consumido: {{ number_format($mConsW, 2) }} Kg / Inicial: {{ number_format($mInitW, 2) }} Kg - {{ $mPct }}%)
+                                        </span>
                                     </div>
                                 </div>
-                                <div class="d-flex align-items-center gap-2">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
                                     <button type="button" class="btn btn-outline-info btn-sm fw-bold py-1 px-2" style="font-size: 11px;" onclick="filterProductsByBobinaWidth({{ $mWidth }})">
                                         🎯 Filtrar bolsas de {{ $mWidth > 0 ? $mWidth . ' cm' : 'esta medida' }}
                                     </button>
                                     <form action="{{ route('operator.unmount_bobina') }}" method="POST" class="d-inline mb-0">
                                         @csrf
                                         @if(!$user->isOperator() && request('operator_id'))
-                                            <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                             <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
                                         @endif
-                                        <button type="submit" class="btn btn-outline-danger btn-sm fw-bold py-1 px-2" style="font-size: 11px;" title="Desmontar bobina de la selladora">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm fw-bold py-1 px-2" style="font-size: 11px;" title="Desmontar bobina temporalmente y guardarla con su saldo en piso">
                                             ✕ Desmontar
+                                        </button>
+                                    </form>
+                                    <form action="{{ route('operator.mark_bobina_consumed') }}" method="POST" class="d-inline mb-0" onsubmit="return confirm('¿Confirmas que la bobina se terminó por completo (llegó al cono/tubo de cartón)?');">
+                                        @csrf
+                                        <input type="hidden" name="bobina_id" value="{{ $mountedBobina->id }}">
+                                        @if(!$user->isOperator() && request('operator_id'))
+                                             <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                        @endif
+                                        <button type="submit" class="btn btn-warning btn-sm fw-bold py-1 px-2 text-dark" style="font-size: 11px;" title="Marcar bobina como agotada/terminada">
+                                            ✅ Agotar Bobina
                                         </button>
                                     </form>
                                 </div>
@@ -308,19 +328,24 @@
                                 @foreach($availableBobinas as $bob)
                                     @php
                                         $isThisMounted = !empty($mountedBobina) && $mountedBobina->id === $bob->id;
+                                        $bInitW = (float)($bob->original_weight ?: $bob->weight);
+                                        $bRemW = (float)$bob->remaining_weight;
+                                        $bConsW = (float)$bob->consumed_weight;
+                                        $bBadgeClass = $bRemW <= 1.0 ? 'bg-danger text-white' : ($bRemW <= 3.0 ? 'bg-warning text-dark' : 'bg-success text-dark');
                                     @endphp
-                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start {{ $isThisMounted ? 'border-success ring-2' : '' }}" style="min-width: 260px; max-width: 300px; border-radius: 10px;">
+                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start {{ $isThisMounted ? 'border-success ring-2' : '' }}" style="min-width: 270px; max-width: 320px; border-radius: 10px;">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <strong class="text-info text-truncate" style="font-size: 12px;" title="{{ $bob->product->name ?? 'Bobina' }}">
                                                 {{ $bob->product->name ?? 'Bobina Extrusión' }}
                                             </strong>
-                                            <span class="badge bg-warning text-dark font-monospace" style="font-size: 11px;">
-                                                {{ number_format($bob->weight, 2) }} Kg
+                                            <span class="badge {{ $bBadgeClass }} font-monospace" style="font-size: 11px;" title="Saldo restante: {{ number_format($bRemW, 2) }} Kg / Inicial: {{ number_format($bInitW, 2) }} Kg">
+                                                Saldo: {{ number_format($bRemW, 2) }} Kg
                                             </span>
                                         </div>
                                         <div class="text-white-50 small d-flex flex-column gap-1" style="font-size: 11px;">
                                             <span>
                                                 📏 <strong>{{ $bob->product?->getDimensionsCmFormatted() ?: 'Manga Continua' }}</strong>
+                                                <span class="text-secondary ms-1">({{ number_format($bInitW, 1) }}k orig.)</span>
                                             </span>
                                             <span>
                                                 🏷️ Lote: <code class="text-warning">{{ $bob->effective_batch_code }}</code>
@@ -329,7 +354,26 @@
                                                 <span>👤 {{ Str::limit($bob->user->name ?? 'Extrusor', 12) }}</span>
                                                 <div class="d-flex gap-1">
                                                     @if($isThisMounted)
-                                                        <span class="badge bg-success text-dark fw-bold">✓ MONTADA</span>
+                                                        <span class="badge bg-success text-dark fw-bold" style="font-size: 10px;">✓ MONTADA</span>
+                                                        <form action="{{ route('operator.unmount_bobina') }}" method="POST" class="d-inline mb-0">
+                                                            @csrf
+                                                            @if(!$user->isOperator() && request('operator_id'))
+                                                                <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                                            @endif
+                                                            <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2 fw-bold" style="font-size: 10px;" title="Desmontar bobina de la selladora">
+                                                                ✕ Desmontar
+                                                            </button>
+                                                        </form>
+                                                        <form action="{{ route('operator.mark_bobina_consumed') }}" method="POST" class="d-inline mb-0" onsubmit="return confirm('¿Confirmas que la bobina se terminó por completo?');">
+                                                            @csrf
+                                                            <input type="hidden" name="bobina_id" value="{{ $bob->id }}">
+                                                            @if(!$user->isOperator() && request('operator_id'))
+                                                                <input type="hidden" name="operator_id" value="{{ request('operator_id') }}">
+                                                            @endif
+                                                            <button type="submit" class="btn btn-warning btn-sm py-0 px-1 fw-bold text-dark" style="font-size: 10px;" title="Marcar bobina como agotada">
+                                                                ✅ Agotar
+                                                            </button>
+                                                        </form>
                                                     @else
                                                         <form action="{{ route('operator.mount_bobina') }}" method="POST" class="d-inline mb-0">
                                                             @csrf
