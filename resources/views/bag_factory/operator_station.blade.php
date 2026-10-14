@@ -1206,17 +1206,19 @@
 
     // Compatibilidad con selectProduct previo
     function selectProduct(id) {
-        selectProductById(id);
+        selectProductById(id, true);
     }
 
-    function selectProductById(id) {
+    function selectProductById(id, isUserAction = true) {
         const prod = productsCatalog.find(p => p.id == id);
         if (!prod) return;
 
         // Validar compatibilidad industrial estricta
         const compat = checkProductCompatibilityWithMountedBobina(prod);
         if (!compat.compatible) {
-            alert(`⛔ BLOQUEO DE INCOMPATIBILIDAD INDUSTRIAL:\n\n${compat.error}.\n\nNo puedes sellar este producto con la bobina montada actual (Lote: ${mountedBobinaSpec ? mountedBobinaSpec.code : ''}).\nSi necesitas sellar este producto, debes desmontar primero la bobina montada.`);
+            if (isUserAction) {
+                alert(`⛔ BLOQUEO DE INCOMPATIBILIDAD INDUSTRIAL:\n\n${compat.error}.\n\nNo puedes sellar este producto con la bobina montada actual (Lote: ${mountedBobinaSpec ? mountedBobinaSpec.code : ''}).\nSi necesitas sellar este producto, debes desmontar primero la bobina montada.`);
+            }
             return;
         }
 
@@ -1744,10 +1746,28 @@
         modal.show();
     }
 
-    // Inicializar producto por defecto (si hay productos disponibles)
+    // Inicializar producto compatible por defecto
     document.addEventListener('DOMContentLoaded', () => {
-        if (productsCatalog.length > 0) {
-            selectProductById(productsCatalog[0].id);
+        const pool = getAvailableProductsPool();
+        if (pool.length > 0) {
+            selectProductById(pool[0].id, false);
+        } else {
+            // Si no hay productos compatibles o catálogo vacío, dejar el buscador limpio sin alertas molestas
+            activeProduct = null;
+            const searchInput = document.getElementById('productSearchInput');
+            if (searchInput) searchInput.value = '';
+            const prodIdInput = document.getElementById('selectedProductId');
+            if (prodIdInput) prodIdInput.value = '';
+            const badge = document.getElementById('selectedProductBadge');
+            if (badge) {
+                if (mountedBobinaSpec) {
+                    badge.className = 'badge bg-warning text-dark';
+                    badge.innerHTML = '⚠️ Sin bolsa compatible seleccionada';
+                } else {
+                    badge.className = 'badge bg-secondary text-white';
+                    badge.innerHTML = 'Ninguna medida seleccionada';
+                }
+            }
         }
     });
 </script>
