@@ -2508,9 +2508,24 @@ class BagFactoryWebController extends Controller
             })->orderBy('name')->get();
         }
 
+        $isExtrusionMachine = (bool)($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
+        $mountedBobina = $activeShift?->mounted_bobina;
+
+        // Para la selladora, el catálogo de productos disponibles son BOLSAS TERMINADAS (no bobinas intermedias)
+        $finishedBagProducts = $products->filter(function ($p) {
+            $isBobina = (bool)($p->is_variable_quantity 
+                || in_array(strtoupper($p->sale_unit ?? ''), ['BOBINA', 'ROLLO', 'KG'])
+                || str_contains(strtoupper($p->category ?? ''), 'BOBINA')
+                || str_contains(strtoupper($p->category ?? ''), 'MANGA')
+                || str_contains(strtoupper($p->name ?? ''), 'BOBINA MANGA'));
+            return !$isBobina;
+        })->values();
+
+        $sealingCatalog = $isExtrusionMachine ? $products : $finishedBagProducts;
+
         // Catálogo serializado para el buscador inteligente reactivo
         $targetDailySalary = (float)($targetUser->daily_salary ?: 15.0);
-        $productsCatalog = $products->map(function ($p) use ($targetDailySalary) {
+        $productsCatalog = $sealingCatalog->map(function ($p) use ($targetDailySalary) {
             $target = (int)($p->target_units_per_shift ?: 5);
             $tariff = $target > 0 ? ($targetDailySalary / $target) : 0.0;
             return [
@@ -2570,13 +2585,10 @@ class BagFactoryWebController extends Controller
             })
             ->values();
 
-        $isExtrusionMachine = (bool)($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
-        $mountedBobina = $activeShift?->mounted_bobina;
-
         // Productos de bolsas terminadas compatibles con la bobina montada
         $compatibleProducts = collect();
         if ($mountedBobina) {
-            $compatibleProducts = $products->filter(fn($p) => $p->isCompatibleWithBobina($mountedBobina))->values();
+            $compatibleProducts = $finishedBagProducts->filter(fn($p) => $p->isCompatibleWithBobina($mountedBobina))->values();
         }
 
         return view('bag_factory.operator_station', compact(

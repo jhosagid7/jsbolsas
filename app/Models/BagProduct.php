@@ -625,6 +625,15 @@ class BagProduct extends Model
         $bobProd = $bobina->product;
         if (!$bobProd) return null;
 
+        // 0. Una bobina intermedia no puede seleccionarse como bolsa terminada
+        if ($this->is_variable_quantity 
+            || in_array(strtoupper($this->sale_unit ?? ''), ['BOBINA', 'ROLLO', 'KG'])
+            || str_contains(strtoupper($this->category ?? ''), 'BOBINA')
+            || str_contains(strtoupper($this->category ?? ''), 'MANGA')
+            || str_contains(strtoupper($this->name ?? ''), 'BOBINA MANGA')) {
+            return "Las bobinas de manga son materia prima intermedia de extrusión, no pueden seleccionarse como bolsa terminada para sellado.";
+        }
+
         // 1. Validar Ancho (cm)
         $bobWidth = (float)$bobProd->effective_width_cm;
         $bagWidth = (float)$this->effective_width_cm;

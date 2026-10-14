@@ -1064,6 +1064,14 @@
     function checkProductCompatibilityWithMountedBobina(p) {
         if (!mountedBobinaSpec) return { compatible: true, error: null };
 
+        // 0. Una bobina intermedia no puede seleccionarse como bolsa terminada para sellar
+        if (p.is_variable || (p.sale_unit && p.sale_unit.toUpperCase() === 'BOBINA') || (p.name && p.name.toUpperCase().includes('BOBINA MANGA'))) {
+            return {
+                compatible: false,
+                error: 'Este registro es una bobina intermedia de extrusión, no una bolsa terminada para sellar'
+            };
+        }
+
         // 1. Validar Ancho (tolerancia de 0.5 cm)
         const bobWidth = parseFloat(mountedBobinaSpec.width_cm || 0);
         const bagWidth = parseFloat(p.width_cm || 0);
@@ -1355,13 +1363,13 @@
                             ${gussetBadge}
                             ${p.width_cm > 0 ? `<span class="badge bg-dark border border-secondary text-white-50" style="font-size: 10px;">📏 ${p.width_cm} cm</span>` : ''}
                             ${p.sku ? `<span class="badge bg-secondary font-monospace">${highlightedSku}</span>` : ''}
-                            <span>⚖️ Teórico: <strong class="text-info">${p.theoretical.toFixed(3)} Kg</strong>/mill</span>
+                            <span>⚖️ Teórico: <strong class="text-info">${p.theoretical.toFixed(3)} Kg</strong>/millar</span>
                             <span>💰 Tarifa: <strong class="text-success">$${p.tariff.toFixed(2)} USD</strong></span>
                         </div>
                     </div>
                     <div class="text-end ps-2 flex-shrink-0">
-                        <span class="badge bg-dark border border-secondary text-info fw-bold">
-                            Meta: ${p.target} m/turno
+                        <span class="badge bg-dark border border-secondary text-info fw-bold" title="Meta esperada por turno de trabajo">
+                            Meta: ${p.target} mill/turno
                         </span>
                         ${isSelected ? '<span class="badge bg-success d-block mt-1">Activo</span>' : ''}
                     </div>
