@@ -708,7 +708,27 @@ class BagFactoryWebController extends Controller
         // 4. Stock actual estimado en planta
         $currentPlantKg = (float)RawMaterialStock::where('warehouse_type', 'planta')->sum('total_kg');
 
-        // 5. Histórico de arqueos realizados
+        // 5. Determinar el Stock Inicial en Planta
+        // Si hay un arqueo previo cerrado, tomamos lo que quedó físicamente en ese arqueo
+        $lastAudit = RawMaterialAudit::where('audit_date', '<=', $startDate->format('Y-m-d'))
+            ->orWhere('created_at', '<=', $startDate)
+            ->latest('audit_date')
+            ->first();
+        if (!$lastAudit) {
+            $lastAudit = RawMaterialAudit::latest('audit_date')->first();
+        }
+
+        if ($lastAudit) {
+            $initialPlantKg = (float)$lastAudit->final_counted_plant_kg;
+        } else {
+            // Primera vez: stock actual en tolva + lo consumido en bobinas/merma - lo transferido en la semana
+            $initialPlantKg = max(0, $currentPlantKg + $goodProductionKg + $wastePurgaKg - $transferredToPlantKg);
+            if ($initialPlantKg <= 0 && $currentPlantKg > 0) {
+                $initialPlantKg = $currentPlantKg;
+            }
+        }
+
+        // 6. Histórico de arqueos realizados
         $audits = RawMaterialAudit::with('auditor')->latest('audit_date')->take(10)->get();
 
         return view('raw_materials.weekly_audit', compact(
@@ -718,6 +738,7 @@ class BagFactoryWebController extends Controller
             'goodProductionKg',
             'wastePurgaKg',
             'currentPlantKg',
+            'initialPlantKg',
             'audits'
         ));
     }

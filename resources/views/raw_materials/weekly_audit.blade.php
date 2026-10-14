@@ -100,7 +100,7 @@
                         <label class="form-label text-white fw-bold small">Stock Inicial en Planta (Kg):</label>
                         <input type="number" step="0.01" name="initial_plant_kg" id="initialPlantInput"
                                class="form-control bg-dark text-white border-secondary fw-bold fs-5 text-center"
-                               value="0.00" oninput="recalcBalance()">
+                               value="{{ number_format($initialPlantKg ?? 0, 2, '.', '') }}" oninput="recalcBalance()">
                         <small class="text-white-50">Lo que quedó en planta el sábado anterior</small>
                     </div>
 
