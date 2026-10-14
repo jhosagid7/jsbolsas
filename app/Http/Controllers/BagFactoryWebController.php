@@ -2522,10 +2522,11 @@ class BagFactoryWebController extends Controller
                 'target'      => $target,
                 'millar'      => (float)($p->millar_per_bulto ?: 1),
                 'is_variable' => (bool)$p->is_variable_quantity,
-                'width_cm'    => (float)($p->width_inch ?? 0),
+                'width_cm'    => (float)$p->effective_width_cm,
                 'gusset_cm'   => (float)($p->gusset_cm ?? 0),
+                'has_gusset'  => (bool)$p->effective_has_gusset,
                 'caliber'     => (float)($p->gauge_caliber ?? 0),
-                'material'    => $p->material_type ?? '',
+                'material'    => $p->effective_material_type,
                 'tariff'      => round($tariff, 2),
             ];
         })->values();
@@ -2572,6 +2573,12 @@ class BagFactoryWebController extends Controller
         $isExtrusionMachine = (bool)($activeShift && $activeShift->machine && $activeShift->machine->type === 'extrusora');
         $mountedBobina = $activeShift?->mounted_bobina;
 
+        // Productos de bolsas terminadas compatibles con la bobina montada
+        $compatibleProducts = collect();
+        if ($mountedBobina) {
+            $compatibleProducts = $products->filter(fn($p) => $p->isCompatibleWithBobina($mountedBobina))->values();
+        }
+
         return view('bag_factory.operator_station', compact(
             'user',
             'targetUser',
@@ -2588,7 +2595,8 @@ class BagFactoryWebController extends Controller
             'operatorsList',
             'isExtrusionMachine',
             'availableBobinas',
-            'mountedBobina'
+            'mountedBobina',
+            'compatibleProducts'
         ));
     }
 
@@ -2611,6 +2619,7 @@ class BagFactoryWebController extends Controller
             ? (int)$request->operator_id
             : $user->id;
         $targetUser = User::find($targetUserId) ?: $user;
+        $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
 
         // Obtener o abrir turno activo del usuario objetivo
         $shift = BagShift::where('user_id', $targetUser->id)
@@ -2687,26 +2696,27 @@ class BagFactoryWebController extends Controller
             } else {
                 $caliber = $inputCaliber;
             }
-            $matType = trim($request->extrusion_material_type ?: 'Baja Densidad');
-            if ($hasGusset) {
-                $matType .= ' Con Fuelle';
-            } else {
-                $matType .= ' Plana';
-            }
+            $rawMatType = trim($request->extrusion_material_type ?: 'Baja Densidad');
+            $isAlta = (stripos($rawMatType, 'ALTA') !== false || stripos($rawMatType, 'HDPE') !== false);
+            $matLabel = $isAlta ? 'Alta Densidad' : 'Baja Densidad';
+            $matCode = $isAlta ? 'ALTA' : 'BAJA';
+            $fullMatType = $matLabel . ($hasGusset ? ' Con Fuelle' : ' Plana');
 
             $formattedCal = (fmod($caliber, 1.0) == 0) ? (int)$caliber : round($caliber, 1);
             $calStr = str_replace('.', '_', (string)$formattedCal);
+            $fmtCode = $hasGusset ? ('-F' . str_replace('.', '_', (string)$gussetCm)) : '-PL';
+            $widthStr = str_replace('.', '_', (string)$widthCm);
 
-            // Generar o reutilizar el producto técnico de bobina para esta especificación incluyendo Calibre
-            $mangaSku = 'BOB-' . str_replace('.', '_', (string)$widthCm) . "-C{$calStr}" . ($gussetCm > 0 ? ('-F' . str_replace('.', '_', (string)$gussetCm)) : '-PL');
-            $mangaName = "BOBINA MANGA {$widthCm} CM C-{$formattedCal}" . ($gussetCm > 0 ? " (FUELLE {$gussetCm} CM)" : " PLANA");
+            // Generar o reutilizar el producto técnico de bobina para esta especificación incluyendo Material
+            $mangaSku = "BOB-{$matCode}-{$widthStr}-C{$calStr}{$fmtCode}";
+            $mangaName = "BOBINA MANGA {$matCode} {$widthCm} CM C-{$formattedCal}" . ($hasGusset ? " (FUELLE {$gussetCm} CM)" : " PLANA");
 
             $product = BagProduct::firstOrCreate(
                 ['sku' => $mangaSku],
                 [
                     'name'                  => $mangaName,
                     'category'              => 'Bobina Extrusión',
-                    'material_type'         => $matType,
+                    'material_type'         => $fullMatType,
                     'width_inch'            => $widthCm,
                     'gusset_cm'             => $gussetCm,
                     'gauge_caliber'         => $caliber,
@@ -2720,19 +2730,24 @@ class BagFactoryWebController extends Controller
                 ]
             );
 
-            // Asegurar que si ya existía mantenga sus dimensiones actualizadas
-            if ((float)$product->width_inch !== $widthCm || (float)$product->gusset_cm !== $gussetCm || (float)$product->gauge_caliber !== (float)$caliber) {
+            // Asegurar que si ya existía mantenga sus dimensiones y material actualizados
+            if ((float)$product->width_inch !== $widthCm 
+                || (float)$product->gusset_cm !== $gussetCm 
+                || (float)$product->gauge_caliber !== (float)$caliber
+                || $product->material_type !== $fullMatType
+                || $product->name !== $mangaName) {
                 $product->update([
+                    'name'          => $mangaName,
+                    'material_type' => $fullMatType,
                     'width_inch'    => $widthCm,
                     'gusset_cm'     => $gussetCm,
                     'gauge_caliber' => $caliber,
-                    'material_type' => $matType,
                 ]);
             }
         } else {
             // --- FLUJO ESTÁNDAR: PRODUCTO SELECCIONADO ---
             if (!$request->filled('product_id')) {
-                return redirect()->back()->with('error', 'Debe seleccionar una medida o producto para registrar la producción.');
+                return redirect()->route('operator.station', $redirectParams)->with('error', 'Debe seleccionar una medida o producto para registrar la producción.');
             }
 
             $product = BagProduct::findOrFail($request->product_id);
@@ -2821,6 +2836,12 @@ class BagFactoryWebController extends Controller
         if ($sourceBobinaId) {
             $sourceBob = BagProduction::find($sourceBobinaId);
             if ($sourceBob) {
+                // Validación estricta de compatibilidad industrial
+                $compError = $product->getBobinaCompatibilityError($sourceBob);
+                if ($compError) {
+                    return redirect()->route('operator.station', $redirectParams)->with('error', "⛔ Incompatibilidad Industrial: {$compError}");
+                }
+
                 $metadataPayload['source_bobina_id'] = $sourceBob->id;
                 $metadataPayload['source_bobina_batch'] = $sourceBob->effective_batch_code;
                 $metadataPayload['source_bobina_operator'] = $sourceBob->user?->name;

@@ -318,7 +318,7 @@ class ExtrusionPhaseOneTest extends TestCase
         $prodDirect = BagProduction::latest('id')->first();
         $this->assertEquals('direct_sale', $prodDirect->metadata['roll_destination']);
         $this->assertEquals(28.0, $prodDirect->metadata['rolls'][0]['weight']);
-        $this->assertEquals('BOB-40-C3-PL', $prodDirect->product->sku);
+        $this->assertEquals('BOB-BAJA-40-C3-PL', $prodDirect->product->sku);
     }
 
     /** @test */
@@ -382,13 +382,15 @@ class ExtrusionPhaseOneTest extends TestCase
         $this->assertEquals($bobina->id, $shift->mounted_bobina_id);
         $this->assertEquals($bobina->id, $shift->mounted_bobina->id);
 
-        // 5. Crear producto bolsa terminada compatible
+        // 5. Crear producto bolsa terminada compatible con bobina 22cm Baja Fuelle
         $hieloProduct = BagProduct::create([
-            'name'                  => 'Bolsa Hielo 30x50 C-15',
-            'sku'                   => 'BOL-HIELO-3050-C15',
-            'category'              => 'Bolsa Hielo',
-            'width_inch'            => 30.0,
+            'name'                  => 'Bolsa 22x50 Baja Fuelle C-15',
+            'sku'                   => 'BOL-2250-F-C15',
+            'category'              => 'Bolsa Fuelle',
+            'material_type'         => 'Baja Densidad',
+            'width_inch'            => 22.0,
             'length_inch'           => 50.0,
+            'gusset_cm'             => 5.0,
             'gauge_caliber'         => 15.0,
             'sale_unit'             => 'BULTO',
             'millar_per_bulto'      => 1.0,
@@ -461,5 +463,184 @@ class ExtrusionPhaseOneTest extends TestCase
         // 13. La bobina agotada ya no aparece en la bandeja de bobinas disponibles
         $stationAfterAgotar = $this->actingAs($sealer)->get(route('operator.station'));
         $stationAfterAgotar->assertDontSee('Lote: ' . $bobina->effective_batch_code);
+    }
+
+    /** @test */
+    public function it_strictly_enforces_bobina_compatibility_and_blocks_incompatible_bags()
+    {
+        $sealer = User::create([
+            'name'     => 'Pedro Sellador Compat',
+            'email'    => 'pedro.compat.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $sealerMachine = BagMachine::create([
+            'name'      => 'Selladora Lateral 02',
+            'code'      => 'SEL-02',
+            'type'      => 'selladora',
+            'is_active' => true,
+        ]);
+
+        // Bobina Madre: 22 cm, Alta Densidad, Con Fuelle (4 cm)
+        $bobinaProduct = BagProduct::create([
+            'name'                 => 'BOBINA ALTA FUELLE 22X60',
+            'sku'                  => 'BOB-ALTA-22-F',
+            'category'             => 'Bobina',
+            'material_type'        => 'Alta Densidad',
+            'width_inch'           => 22.0,
+            'gusset_cm'            => 4.0,
+            'gauge_caliber'        => 1.5,
+            'unit_weight_kg'       => 20.0,
+            'millar_per_bulto'     => 1.0,
+            'sale_unit'            => 'BOBINA',
+            'is_variable_quantity' => true,
+            'is_active'            => true,
+        ]);
+
+        $shiftExt = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        $bobina = BagProduction::create([
+            'bag_shift_id'          => $shiftExt->id,
+            'user_id'               => $this->operator->id,
+            'product_id'            => $bobinaProduct->id,
+            'production_formula_id' => $this->formula->id,
+            'quantity'              => 1,
+            'weight'                => 20.0,
+            'status'                => 'approved',
+            'batch_code'            => 'EXT-01-ALTA22',
+            'is_waste_record'       => false,
+            'recorded_at'           => now(),
+            'sync_id'               => 'PROD-' . uniqid(),
+        ]);
+
+        // Turno del sellador y montaje de la bobina
+        $sealerShift = BagShift::create([
+            'user_id'    => $sealer->id,
+            'machine_id' => $sealerMachine->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-SEL-' . uniqid(),
+        ]);
+        $sealerShift->mountBobina($bobina->id);
+
+        // Bolsa Incompatible 1: Mismo ancho y fuelle pero Baja Densidad
+        $incompatibleMaterialBag = BagProduct::create([
+            'name'                 => 'BOLSA BAJA FUELLE 22X45',
+            'sku'                  => 'BOL-BAJA-22-F',
+            'category'             => 'Bolsa',
+            'material_type'        => 'Baja Densidad',
+            'width_inch'           => 22.0,
+            'gusset_cm'            => 4.0,
+            'unit_weight_kg'       => 5.0,
+            'millar_per_bulto'     => 1.0,
+            'sale_unit'            => 'MILLAR',
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        $respMat = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'product_id' => $incompatibleMaterialBag->id,
+            'quantity'   => 1,
+            'weight'     => 5.0,
+            'machine_id' => $sealerMachine->id,
+            'print_mode' => 'save_only',
+        ]);
+        $respMat->assertRedirect(route('operator.station'));
+        $respMat->assertSessionHas('error');
+        $this->assertStringContainsString('Alta Densidad', session('error'));
+        $this->assertStringContainsString('Baja Densidad', session('error'));
+
+        // Bolsa Incompatible 2: Mismo ancho y material pero Plana (sin fuelle)
+        $incompatibleGussetBag = BagProduct::create([
+            'name'                 => 'BOLSA ALTA PLANA 22X50',
+            'sku'                  => 'BOL-ALTA-22-P',
+            'category'             => 'Bolsa',
+            'material_type'        => 'Alta Densidad',
+            'width_inch'           => 22.0,
+            'gusset_cm'            => 0.0,
+            'unit_weight_kg'       => 5.0,
+            'millar_per_bulto'     => 1.0,
+            'sale_unit'            => 'MILLAR',
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        $respGusset = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'product_id' => $incompatibleGussetBag->id,
+            'quantity'   => 1,
+            'weight'     => 5.0,
+            'machine_id' => $sealerMachine->id,
+            'print_mode' => 'save_only',
+        ]);
+        $respGusset->assertRedirect(route('operator.station'));
+        $respGusset->assertSessionHas('error');
+        $this->assertStringContainsString('Con Fuelle', session('error'));
+        $this->assertStringContainsString('Plana', session('error'));
+
+        // Bolsa Incompatible 3: Mismo material y fuelle pero Ancho 30 cm
+        $incompatibleWidthBag = BagProduct::create([
+            'name'                 => 'BOLSA ALTA FUELLE 30X60',
+            'sku'                  => 'BOL-ALTA-30-F',
+            'category'             => 'Bolsa',
+            'material_type'        => 'Alta Densidad',
+            'width_inch'           => 30.0,
+            'gusset_cm'            => 4.0,
+            'unit_weight_kg'       => 5.0,
+            'millar_per_bulto'     => 1.0,
+            'sale_unit'            => 'MILLAR',
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        $respWidth = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'product_id' => $incompatibleWidthBag->id,
+            'quantity'   => 1,
+            'weight'     => 5.0,
+            'machine_id' => $sealerMachine->id,
+            'print_mode' => 'save_only',
+        ]);
+        $respWidth->assertRedirect(route('operator.station'));
+        $respWidth->assertSessionHas('error');
+        $this->assertStringContainsString('ancho', session('error'));
+
+        // Bolsa Totalmente Compatible: 22 cm, Alta Densidad, Con Fuelle
+        $compatibleBag = BagProduct::create([
+            'name'                 => 'BOLSA ALTA FUELLE 22X50',
+            'sku'                  => 'BOL-ALTA-22-F-OK',
+            'category'             => 'Bolsa',
+            'material_type'        => 'Alta Densidad',
+            'width_inch'           => 22.0,
+            'gusset_cm'            => 4.0,
+            'unit_weight_kg'       => 5.0,
+            'millar_per_bulto'     => 1.0,
+            'sale_unit'            => 'MILLAR',
+            'is_variable_quantity' => false,
+            'is_active'            => true,
+        ]);
+
+        $respCompat = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'product_id' => $compatibleBag->id,
+            'quantity'   => 1,
+            'weight'     => 5.0,
+            'machine_id' => $sealerMachine->id,
+            'print_mode' => 'save_only',
+        ]);
+        $respCompat->assertRedirect(route('operator.station'));
+        $respCompat->assertSessionHas('success');
+
+        // Verificar trazabilidad correcta
+        $sealedProd = BagProduction::where('product_id', $compatibleBag->id)->first();
+        $this->assertNotNull($sealedProd);
+        $this->assertEquals($bobina->id, $sealedProd->metadata['source_bobina_id']);
+        $this->assertEquals($bobina->effective_batch_code, $sealedProd->metadata['source_bobina_batch']);
     }
 }

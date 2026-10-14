@@ -555,4 +555,106 @@ class BagProduct extends Model
 
         return implode(' | ', $parts);
     }
+
+    /**
+     * Tipo de material efectivo (Alta Densidad, Baja Densidad o inferido del nombre)
+     */
+    public function getEffectiveMaterialTypeAttribute(): string
+    {
+        if (!empty($this->material_type)) {
+            $mat = trim($this->material_type);
+            if (stripos($mat, 'ALTA') !== false || stripos($mat, 'HDPE') !== false) return 'Alta Densidad';
+            if (stripos($mat, 'BAJA') !== false || stripos($mat, 'LDPE') !== false) return 'Baja Densidad';
+            return $mat;
+        }
+
+        $name = strtoupper($this->name ?? '');
+        if (str_contains($name, 'ALTA') || str_contains($name, 'HDPE')) {
+            return 'Alta Densidad';
+        }
+        if (str_contains($name, 'BAJA') || str_contains($name, 'LDPE')) {
+            return 'Baja Densidad';
+        }
+
+        return 'Baja Densidad'; // Default general si no se especifica
+    }
+
+    /**
+     * Determina si el producto es con fuelle (o plana)
+     */
+    public function getEffectiveHasGussetAttribute(): bool
+    {
+        if ((float)($this->gusset_cm ?? 0) > 0) {
+            return true;
+        }
+
+        $name = strtoupper($this->name ?? '');
+        return str_contains($name, 'FUELLE') || str_contains($name, ' C/A') || str_contains($name, 'ASA');
+    }
+
+    /**
+     * Ancho efectivo en cm (por columna o extraído del nombre ej. 22X60 -> 22)
+     */
+    public function getEffectiveWidthCmAttribute(): float
+    {
+        if ((float)($this->width_inch ?? 0) > 0) {
+            return (float)$this->width_inch;
+        }
+
+        if (preg_match('/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/', $this->name ?? '', $matches)) {
+            return (float)$matches[1];
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Validar compatibilidad entre esta bolsa y una bobina madre montada
+     */
+    public function isCompatibleWithBobina(?BagProduction $bobina): bool
+    {
+        return $this->getBobinaCompatibilityError($bobina) === null;
+    }
+
+    /**
+     * Retorna mensaje de error si la bolsa no es compatible con la bobina montada
+     */
+    public function getBobinaCompatibilityError(?BagProduction $bobina): ?string
+    {
+        if (!$bobina) return null;
+        $bobProd = $bobina->product;
+        if (!$bobProd) return null;
+
+        // 1. Validar Ancho (cm)
+        $bobWidth = (float)$bobProd->effective_width_cm;
+        $bagWidth = (float)$this->effective_width_cm;
+        if ($bobWidth > 0 && $bagWidth > 0 && abs($bobWidth - $bagWidth) > 0.5) {
+            return "El ancho de la bolsa ({$bagWidth} cm) no coincide con el ancho de la bobina ({$bobWidth} cm).";
+        }
+
+        // 2. Validar Fuelle (Plana vs Con Fuelle)
+        $bobHasGusset = (bool)$bobProd->effective_has_gusset;
+        $bagHasGusset = (bool)$this->effective_has_gusset;
+        if ($bobHasGusset !== $bagHasGusset) {
+            $bobFmt = $bobHasGusset ? 'Con Fuelle' : 'Plana (sin fuelle)';
+            $bagFmt = $bagHasGusset ? 'Con Fuelle' : 'Plana (sin fuelle)';
+            return "La bobina montada es {$bobFmt}, pero la bolsa seleccionada es {$bagFmt}.";
+        }
+
+        // 3. Validar Material (Alta Densidad vs Baja Densidad)
+        $bobMat = $bobProd->effective_material_type;
+        $bagMat = $this->effective_material_type;
+        if (!empty($bobMat) && !empty($bagMat)) {
+            $isBobAlta = (stripos($bobMat, 'ALTA') !== false);
+            $isBagAlta = (stripos($bagMat, 'ALTA') !== false);
+            $isBobBaja = (stripos($bobMat, 'BAJA') !== false);
+            $isBagBaja = (stripos($bagMat, 'BAJA') !== false);
+
+            if (($isBobAlta && $isBagBaja) || ($isBobBaja && $isBagAlta)) {
+                return "La bobina montada es de {$bobMat}, pero la bolsa seleccionada es de {$bagMat}.";
+            }
+        }
+
+        return null;
+    }
 }

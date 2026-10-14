@@ -263,34 +263,44 @@
                         @if(!empty($mountedBobina))
                             @php
                                 $mProduct = $mountedBobina->product;
-                                $mWidth = (float)($mProduct?->width_inch ?? 0);
+                                $mWidth = (float)($mProduct?->effective_width_cm ?? 0);
                                 $mInitW = (float)($mountedBobina->original_weight ?: $mountedBobina->weight);
                                 $mRemW = (float)$mountedBobina->remaining_weight;
                                 $mConsW = (float)$mountedBobina->consumed_weight;
                                 $mPct = $mInitW > 0 ? min(100, round(($mConsW / $mInitW) * 100)) : 100;
                                 $mBadgeClass = $mRemW <= 1.0 ? 'bg-danger text-white' : ($mRemW <= 3.0 ? 'bg-warning text-dark' : 'bg-success text-dark');
+                                $mMat = $mProduct?->effective_material_type ?? 'Baja Densidad';
+                                $mIsAlta = stripos($mMat, 'ALTA') !== false;
+                                $mHasGusset = (bool)($mProduct?->effective_has_gusset ?? false);
+                                $mGussetVal = (float)($mProduct?->gusset_cm ?? 0);
                             @endphp
                             <div class="p-3 mb-3 rounded border border-success bg-dark d-flex justify-content-between align-items-center flex-wrap gap-2 shadow-sm" style="background: rgba(16, 185, 129, 0.08) !important;">
-                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
                                     <span class="badge bg-success text-dark fs-6 fw-bold px-2 py-1">
                                         ⚙️ BOBINA MONTADA
                                     </span>
-                                    <div class="text-white small">
-                                        <strong class="text-warning fs-6">{{ $mProduct?->name ?? 'Bobina Extruida' }}</strong>
-                                        <span class="text-white-50 ms-2 font-monospace">📏 {{ $mProduct?->getDimensionsCmFormatted() ?: 'Manga Continua' }}</span>
-                                        <span class="badge bg-dark border border-warning text-warning ms-2 font-monospace">Lote: {{ $mountedBobina->effective_batch_code }}</span>
-                                        <span class="badge bg-info text-dark ms-1">Extrusor: {{ $mountedBobina->user?->name ?? 'Operador' }}</span>
-                                        <span class="badge {{ $mBadgeClass }} ms-2 fs-6 fw-bold shadow-sm" title="Saldo disponible para sellar">
-                                            Saldo: {{ number_format($mRemW, 2) }} Kg
-                                        </span>
-                                        <span class="text-white-50 ms-1" style="font-size: 11px;">
-                                            (Consumido: {{ number_format($mConsW, 2) }} Kg / Inicial: {{ number_format($mInitW, 2) }} Kg - {{ $mPct }}%)
-                                        </span>
-                                    </div>
+                                    <span class="badge {{ $mIsAlta ? 'bg-primary text-white' : 'bg-info text-dark' }} fs-6 fw-bold">
+                                        {{ $mIsAlta ? '🔷 ALTA DENSIDAD' : '🔹 BAJA DENSIDAD' }}
+                                    </span>
+                                    <span class="badge {{ $mHasGusset ? 'bg-warning text-dark' : 'bg-secondary text-white' }} fs-6 fw-bold">
+                                        {{ $mHasGusset ? '📐 CON FUELLE' . ($mGussetVal > 0 ? ' (' . round($mGussetVal, 1) . ' cm)' : '') : '⚪ PLANA' }}
+                                    </span>
+                                    <span class="badge bg-dark border border-secondary text-white fs-6 font-monospace">
+                                        📏 {{ round($mWidth, 1) }} cm
+                                    </span>
+                                    <span class="badge bg-dark border border-warning text-warning fs-6 font-monospace">
+                                        Lote: {{ $mountedBobina->effective_batch_code }}
+                                    </span>
+                                    <span class="badge {{ $mBadgeClass }} fs-6 fw-bold shadow-sm" title="Saldo disponible para sellar">
+                                        Saldo: {{ number_format($mRemW, 2) }} Kg
+                                    </span>
+                                    <span class="text-white-50 ms-1" style="font-size: 11px;">
+                                        (Consumido: {{ number_format($mConsW, 2) }} Kg / Inicial: {{ number_format($mInitW, 2) }} Kg - {{ $mPct }}%)
+                                    </span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <button type="button" class="btn btn-outline-info btn-sm fw-bold py-1 px-2" style="font-size: 11px;" onclick="filterProductsByBobinaWidth({{ $mWidth }})">
-                                        🎯 Filtrar bolsas de {{ $mWidth > 0 ? $mWidth . ' cm' : 'esta medida' }}
+                                    <button type="button" class="btn btn-outline-info btn-sm fw-bold py-1 px-2" style="font-size: 11px;" onclick="openProductDropdown()">
+                                        🎯 Ver bolsas compatibles ({{ round($mWidth, 1) }} cm)
                                     </button>
                                     <form action="{{ route('operator.unmount_bobina') }}" method="POST" class="d-inline mb-0">
                                         @csrf
@@ -332,24 +342,39 @@
                                         $bRemW = (float)$bob->remaining_weight;
                                         $bConsW = (float)$bob->consumed_weight;
                                         $bBadgeClass = $bRemW <= 1.0 ? 'bg-danger text-white' : ($bRemW <= 3.0 ? 'bg-warning text-dark' : 'bg-success text-dark');
+                                        $bProduct = $bob->product;
+                                        $bMat = $bProduct?->effective_material_type ?? 'Baja Densidad';
+                                        $bIsAlta = stripos($bMat, 'ALTA') !== false;
+                                        $bHasGusset = (bool)($bProduct?->effective_has_gusset ?? false);
+                                        $bGussetVal = (float)($bProduct?->gusset_cm ?? 0);
+                                        $bWidth = (float)($bProduct?->effective_width_cm ?? 0);
+                                        $bCaliber = (float)($bProduct?->gauge_caliber ?? 0);
                                     @endphp
-                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start {{ $isThisMounted ? 'border-success ring-2' : '' }}" style="min-width: 270px; max-width: 320px; border-radius: 10px;">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <strong class="text-info text-truncate" style="font-size: 12px;" title="{{ $bob->product->name ?? 'Bobina' }}">
-                                                {{ $bob->product->name ?? 'Bobina Extrusión' }}
-                                            </strong>
+                                    <div class="card bg-dark border-secondary p-2 shadow-sm text-start {{ $isThisMounted ? 'border-success ring-2' : '' }}" style="min-width: 310px; max-width: 360px; border-radius: 10px;">
+                                        <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
+                                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                                <span class="badge {{ $bIsAlta ? 'bg-primary' : 'bg-info text-dark' }} fw-bold" style="font-size: 10px;">
+                                                    {{ $bIsAlta ? '🔷 ALTA' : '🔹 BAJA' }}
+                                                </span>
+                                                <span class="badge {{ $bHasGusset ? 'bg-warning text-dark' : 'bg-secondary' }} fw-bold" style="font-size: 10px;">
+                                                    {{ $bHasGusset ? '📐 FUELLE' . ($bGussetVal > 0 ? ' ' . round($bGussetVal, 1) . 'cm' : '') : '⚪ PLANA' }}
+                                                </span>
+                                                <span class="badge bg-dark border border-secondary text-white fw-bold" style="font-size: 10px;">
+                                                    📏 {{ round($bWidth, 1) }} cm
+                                                </span>
+                                            </div>
                                             <span class="badge {{ $bBadgeClass }} font-monospace" style="font-size: 11px;" title="Saldo restante: {{ number_format($bRemW, 2) }} Kg / Inicial: {{ number_format($bInitW, 2) }} Kg">
                                                 Saldo: {{ number_format($bRemW, 2) }} Kg
                                             </span>
                                         </div>
+                                        <div class="text-white fw-bold mb-1" style="font-size: 12px;" title="{{ $bProduct?->name ?? 'Bobina' }}">
+                                            {{ $bProduct?->name ?? 'Bobina Manga' }}
+                                        </div>
                                         <div class="text-white-50 small d-flex flex-column gap-1" style="font-size: 11px;">
-                                            <span>
-                                                📏 <strong>{{ $bob->product?->getDimensionsCmFormatted() ?: 'Manga Continua' }}</strong>
-                                                <span class="text-secondary ms-1">({{ number_format($bInitW, 1) }}k orig.)</span>
-                                            </span>
-                                            <span>
-                                                🏷️ Lote: <code class="text-warning">{{ $bob->effective_batch_code }}</code>
-                                            </span>
+                                            <div class="d-flex justify-content-between text-secondary" style="font-size: 10px;">
+                                                <span>🏷️ Lote: <code class="text-warning">{{ $bob->effective_batch_code }}</code></span>
+                                                <span>({{ number_format($bInitW, 1) }}k orig.)</span>
+                                            </div>
                                             <div class="d-flex justify-content-between align-items-center text-white-50 mt-1 pt-1 border-top border-secondary" style="font-size: 10px;">
                                                 <span>👤 {{ Str::limit($bob->user->name ?? 'Extrusor', 12) }}</span>
                                                 <div class="d-flex gap-1">
@@ -544,16 +569,47 @@
                                 <span class="badge bg-secondary text-white" id="selectedProductBadge">Ninguna medida seleccionada</span>
                             </label>
 
-                            {{-- Accesos Rápidos de Medidas Populares --}}
+                            {{-- Filtro Estricto de Compatibilidad con Bobina Montada --}}
+                            @if(!empty($mountedBobina))
+                                @php
+                                    $mProduct = $mountedBobina->product;
+                                    $mWidth = (float)($mProduct?->effective_width_cm ?? 0);
+                                    $mMat = $mProduct?->effective_material_type ?? 'Baja Densidad';
+                                    $mHasGusset = (bool)($mProduct?->effective_has_gusset ?? false);
+                                @endphp
+                                <div class="alert alert-info py-1 px-2 mb-2 d-flex justify-content-between align-items-center small shadow-sm" style="font-size: 11px; background: rgba(13, 202, 240, 0.1) !important; border-color: rgba(13, 202, 240, 0.3) !important;">
+                                    <span>
+                                        🔒 <strong>Filtro Industrial Estricto:</strong> Solo puedes sellar bolsas de <strong>{{ round($mWidth, 1) }} cm</strong>, <strong>{{ $mHasGusset ? 'Con Fuelle' : 'Plana' }}</strong> y <strong>{{ $mMat }}</strong>.
+                                    </span>
+                                    <span class="badge bg-info text-dark font-monospace">Bobina #{{ $mountedBobina->id }}</span>
+                                </div>
+                            @endif
+
+                            {{-- Accesos Rápidos de Medidas Populares o Compatibles --}}
                             <div class="d-flex flex-wrap gap-1 mb-2">
-                                <span class="text-white-50 small align-self-center me-1" style="font-size: 10px;">Frecuentes:</span>
-                                @foreach($products->take(6) as $fastProd)
-                                    <button type="button" class="btn btn-outline-secondary btn-sm text-truncate text-white fast-prod-btn py-0 px-2"
-                                            style="font-size: 11px; max-width: 140px; border-radius: 6px;"
-                                            onclick="selectProductById({{ $fastProd->id }})">
-                                        {{ $fastProd->name }}
-                                    </button>
-                                @endforeach
+                                @if(!empty($mountedBobina))
+                                    <span class="text-info fw-bold small align-self-center me-1" style="font-size: 11px;">🎯 Compatibles:</span>
+                                    @forelse($compatibleProducts->take(8) as $fastProd)
+                                        <button type="button" class="btn btn-outline-info btn-sm text-truncate fast-prod-btn py-0 px-2 fw-bold"
+                                                style="font-size: 11px; max-width: 180px; border-radius: 6px;"
+                                                onclick="selectProductById({{ $fastProd->id }})">
+                                            {{ $fastProd->name }}
+                                        </button>
+                                    @empty
+                                        <span class="badge bg-danger text-white py-1">
+                                            ⚠️ No hay bolsas compatibles en catálogo con esta medida/material
+                                        </span>
+                                    @endforelse
+                                @else
+                                    <span class="text-white-50 small align-self-center me-1" style="font-size: 10px;">Frecuentes:</span>
+                                    @foreach($products->take(6) as $fastProd)
+                                        <button type="button" class="btn btn-outline-secondary btn-sm text-truncate text-white fast-prod-btn py-0 px-2"
+                                                style="font-size: 11px; max-width: 140px; border-radius: 6px;"
+                                                onclick="selectProductById({{ $fastProd->id }})">
+                                            {{ $fastProd->name }}
+                                        </button>
+                                    @endforeach
+                                @endif
                             </div>
 
                             {{-- Buscador Inteligente Reactivo --}}
@@ -774,8 +830,30 @@
                                         {{ $prod->recorded_at ? $prod->recorded_at->format('h:i A') : '--' }}
                                     </td>
                                     <td>
-                                        <strong class="text-white">{{ $prod->product->name ?? 'Bolsa' }}</strong>
-                                        <span class="text-white-50 small d-block">{{ $prod->product->sku ?? '' }}</span>
+                                        <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                            <strong class="text-white">{{ $prod->product->name ?? 'Bolsa' }}</strong>
+                                            @if($prod->product)
+                                                @php
+                                                    $pMat = $prod->product->effective_material_type;
+                                                    $pIsAlta = stripos($pMat, 'ALTA') !== false;
+                                                    $pHasGusset = (bool)$prod->product->effective_has_gusset;
+                                                    $pGussetVal = (float)($prod->product->gusset_cm ?? 0);
+                                                    $pWidth = (float)$prod->product->effective_width_cm;
+                                                @endphp
+                                                <span class="badge {{ $pIsAlta ? 'bg-primary' : 'bg-info text-dark' }} fw-bold" style="font-size: 10px;">
+                                                    {{ $pIsAlta ? '🔷 ALTA' : '🔹 BAJA' }}
+                                                </span>
+                                                <span class="badge {{ $pHasGusset ? 'bg-warning text-dark' : 'bg-secondary' }} fw-bold" style="font-size: 10px;">
+                                                    {{ $pHasGusset ? '📐 FUELLE' . ($pGussetVal > 0 ? ' ' . round($pGussetVal, 1) . 'cm' : '') : '⚪ PLANA' }}
+                                                </span>
+                                                @if($pWidth > 0)
+                                                    <span class="badge bg-dark border border-secondary text-white fw-bold" style="font-size: 10px;">
+                                                        📏 {{ round($pWidth, 1) }} cm
+                                                    </span>
+                                                @endif
+                                            @endif
+                                        </div>
+                                        <span class="text-white-50 small font-monospace">{{ $prod->product->sku ?? '' }}</span>
                                     </td>
                                     <td>
                                         <span class="badge bg-dark font-monospace text-warning border border-secondary">
@@ -923,18 +1001,37 @@
             $t = (int)($p->target_units_per_shift ?: 5);
             $tf = $t > 0 ? ($targetSalary / $t) : 0.0;
             $catalogItems[] = [
-                'id' => $p->id,
-                'name' => $p->name,
-                'sku' => $p->sku ?? '',
-                'sale_unit' => $p->sale_unit ?? '',
+                'id'          => $p->id,
+                'name'        => $p->name,
+                'sku'         => $p->sku ?? '',
+                'sale_unit'   => $p->sale_unit ?? '',
                 'theoretical' => (float)($p->unit_weight_kg > 0 ? $p->unit_weight_kg : 1.0),
-                'target' => $t,
-                'millar' => (float)($p->millar_per_bulto ?: 1),
+                'target'      => $t,
+                'millar'      => (float)($p->millar_per_bulto ?: 1),
                 'is_variable' => (bool)$p->is_variable_quantity,
-                'tariff' => round($tf, 2),
+                'width_cm'    => (float)$p->effective_width_cm,
+                'gusset_cm'   => (float)($p->gusset_cm ?? 0),
+                'has_gusset'  => (bool)$p->effective_has_gusset,
+                'caliber'     => (float)($p->gauge_caliber ?? 0),
+                'material'    => $p->effective_material_type,
+                'tariff'      => round($tf, 2),
             ];
         }
         $productsCatalogJson = json_encode($catalogItems);
+    }
+
+    $mountedBobinaSpec = null;
+    if (!empty($mountedBobina)) {
+        $mProd = $mountedBobina->product;
+        $mountedBobinaSpec = [
+            'id'         => $mountedBobina->id,
+            'code'       => $mountedBobina->effective_batch_code,
+            'name'       => $mProd?->name ?? 'Bobina Madre',
+            'width_cm'   => (float)($mProd?->effective_width_cm ?? 0),
+            'material'   => $mProd?->effective_material_type ?? 'Baja Densidad',
+            'has_gusset' => (bool)($mProd?->effective_has_gusset ?? false),
+            'gusset_cm'  => (float)($mProd?->gusset_cm ?? 0),
+        ];
     }
 @endphp
 
@@ -944,6 +1041,7 @@
 
     // Catálogo completo de productos para filtrado reactivo instantáneo (sub-milisegundo)
     const productsCatalog = {!! $productsCatalogJson !!};
+    const mountedBobinaSpec = {!! json_encode($mountedBobinaSpec) !!};
 
     // Precomputar cadena de búsqueda normalizada (sin acentos, minúsculas)
     function normalizeStr(str) {
@@ -955,12 +1053,65 @@
     }
 
     productsCatalog.forEach(p => {
-        p._searchStr = normalizeStr(`${p.name} ${p.sku} ${p.sale_unit}`);
+        p._searchStr = normalizeStr(`${p.name} ${p.sku} ${p.sale_unit} ${p.material || ''}`);
     });
 
     let currentFiltered = [];
     let highlightedIndex = -1;
     let activeProduct = null;
+
+    // Validación estricta de compatibilidad en Frontend
+    function checkProductCompatibilityWithMountedBobina(p) {
+        if (!mountedBobinaSpec) return { compatible: true, error: null };
+
+        // 1. Validar Ancho (tolerancia de 0.5 cm)
+        const bobWidth = parseFloat(mountedBobinaSpec.width_cm || 0);
+        const bagWidth = parseFloat(p.width_cm || 0);
+        if (bobWidth > 0 && bagWidth > 0 && Math.abs(bobWidth - bagWidth) > 0.5) {
+            return {
+                compatible: false,
+                error: `El ancho de la bolsa (${bagWidth} cm) no coincide con la bobina (${bobWidth} cm)`
+            };
+        }
+
+        // 2. Validar Formato (Fuelle vs Plana)
+        const bobHasGusset = Boolean(mountedBobinaSpec.has_gusset);
+        const bagHasGusset = Boolean(p.has_gusset);
+        if (bobHasGusset !== bagHasGusset) {
+            return {
+                compatible: false,
+                error: bobHasGusset 
+                    ? 'La bobina es Con Fuelle pero esta bolsa es Plana (sin fuelle)' 
+                    : 'La bobina es Plana pero esta bolsa tiene Fuelle'
+            };
+        }
+
+        // 3. Validar Material (Alta Densidad vs Baja Densidad)
+        const bobMat = (mountedBobinaSpec.material || '').toUpperCase();
+        const bagMat = (p.material || '').toUpperCase();
+        if (bobMat && bagMat) {
+            const isBobAlta = bobMat.includes('ALTA');
+            const isBagAlta = bagMat.includes('ALTA');
+            const isBobBaja = bobMat.includes('BAJA');
+            const isBagBaja = bagMat.includes('BAJA');
+
+            if ((isBobAlta && isBagBaja) || (isBobBaja && isBagAlta)) {
+                return {
+                    compatible: false,
+                    error: `La bobina es de ${mountedBobinaSpec.material} pero esta bolsa es de ${p.material}`
+                };
+            }
+        }
+
+        return { compatible: true, error: null };
+    }
+
+    function getAvailableProductsPool() {
+        if (!mountedBobinaSpec) {
+            return productsCatalog;
+        }
+        return productsCatalog.filter(p => checkProductCompatibilityWithMountedBobina(p).compatible);
+    }
 
     function setQty(val) {
         document.getElementById('quantityInput').value = val;
@@ -975,6 +1126,13 @@
     function selectProductById(id) {
         const prod = productsCatalog.find(p => p.id == id);
         if (!prod) return;
+
+        // Validar compatibilidad industrial estricta
+        const compat = checkProductCompatibilityWithMountedBobina(prod);
+        if (!compat.compatible) {
+            alert(`⛔ BLOQUEO DE INCOMPATIBILIDAD INDUSTRIAL:\n\n${compat.error}.\n\nNo puedes sellar este producto con la bobina montada actual (Lote: ${mountedBobinaSpec ? mountedBobinaSpec.code : ''}).\nSi necesitas sellar este producto, debes desmontar primero la bobina montada.`);
+            return;
+        }
 
         activeProduct = prod;
         document.getElementById('selectedProductId').value = prod.id;
@@ -993,11 +1151,13 @@
             clearBtn.classList.remove('d-none');
         }
 
-        // Actualizar Badge de Estado
+        // Actualizar Badge de Estado con detalles técnicos
         const badge = document.getElementById('selectedProductBadge');
         if (badge) {
+            const matLabel = prod.material ? prod.material : 'Estándar';
+            const fmtLabel = prod.has_gusset ? 'Fuelle' : 'Plana';
             badge.className = 'badge bg-success text-white';
-            badge.innerHTML = `✓ ${prod.name}`;
+            badge.innerHTML = `✓ ${prod.name} <span class="badge bg-dark ms-1">${matLabel} - ${fmtLabel}</span>`;
         }
 
         // Actualizar Ficha de Especificaciones
@@ -1104,15 +1264,14 @@
         const dropdown = document.getElementById('productDropdownList');
         if (!dropdown) return;
 
+        const pool = getAvailableProductsPool();
         const qNorm = normalizeStr(query.trim());
         const tokens = qNorm.split(/\s+/).filter(Boolean);
 
         if (!tokens.length) {
-            // Mostrar los primeros 25 productos como sugerencias iniciales
-            currentFiltered = productsCatalog.slice(0, 25);
+            currentFiltered = pool.slice(0, 30);
         } else {
-            // Filtrar productos que contengan todos los tokens (búsqueda multi-palabra inteligente)
-            currentFiltered = productsCatalog.filter(p => tokens.every(tok => p._searchStr.includes(tok)));
+            currentFiltered = pool.filter(p => tokens.every(tok => p._searchStr.includes(tok)));
         }
 
         if (resetHighlight) {
@@ -1120,18 +1279,40 @@
         }
 
         if (currentFiltered.length === 0) {
-            dropdown.innerHTML = `
-                <div class="p-3 text-center text-white-50">
-                    <div class="fs-4 mb-1">🔍</div>
-                    <div class="fw-bold">No se encontraron productos coincidentes</div>
-                    <small>Prueba buscando con otra medida (ej: 40x60, 30x40, cristal)</small>
-                </div>
-            `;
+            if (mountedBobinaSpec && pool.length === 0) {
+                dropdown.innerHTML = `
+                    <div class="p-3 text-center text-warning">
+                        <div class="fs-4 mb-1">⚠️</div>
+                        <div class="fw-bold">No hay bolsas compatibles en el catálogo</div>
+                        <small class="d-block text-white-50 mt-1">
+                            Bobina montada: ${mountedBobinaSpec.width_cm} cm | ${mountedBobinaSpec.has_gusset ? 'Con Fuelle' : 'Plana'} | ${mountedBobinaSpec.material}.
+                        </small>
+                        <small class="text-info d-block mt-2">
+                            Desmonta la bobina si vas a sellar otra medida o registra la bolsa compatible en el catálogo.
+                        </small>
+                    </div>
+                `;
+            } else {
+                dropdown.innerHTML = `
+                    <div class="p-3 text-center text-white-50">
+                        <div class="fs-4 mb-1">🔍</div>
+                        <div class="fw-bold">No se encontraron productos coincidentes</div>
+                        <small>Prueba buscando con otra medida o nombre</small>
+                    </div>
+                `;
+            }
             return;
         }
 
         let html = '';
-        if (!tokens.length) {
+        if (mountedBobinaSpec) {
+            html += `
+                <div class="px-3 py-1 bg-info bg-opacity-25 text-info small border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center">
+                    <span>🔒 Solo compatibles (${pool.length}): <strong>${mountedBobinaSpec.width_cm}cm • ${mountedBobinaSpec.has_gusset ? 'Con Fuelle' : 'Plana'} • ${mountedBobinaSpec.material}</strong></span>
+                    <span class="badge bg-dark text-info">Bobina #${mountedBobinaSpec.id}</span>
+                </div>
+            `;
+        } else if (!tokens.length) {
             html += `
                 <div class="px-3 py-1 bg-secondary bg-opacity-25 text-white-50 small border-bottom border-secondary border-opacity-25 d-flex justify-content-between">
                     <span>⚡ Catálogo rápido (${productsCatalog.length} productos)</span>
@@ -1153,16 +1334,26 @@
             const highlightedName = highlightText(p.name, tokens);
             const highlightedSku = highlightText(p.sku || '', tokens);
 
+            const isAlta = (p.material && p.material.toUpperCase().includes('ALTA'));
+            const matBadgeClass = isAlta ? 'bg-primary' : 'bg-info text-dark';
+            const matBadgeText = p.material || 'Estándar';
+            const gussetBadge = p.has_gusset 
+                ? '<span class="badge bg-warning text-dark fw-bold" style="font-size: 10px;">📐 FUELLE</span>'
+                : '<span class="badge bg-secondary text-white" style="font-size: 10px;">⚪ PLANA</span>';
+
             html += `
                 <div class="product-search-item px-3 py-2 border-bottom border-secondary border-opacity-25 text-white d-flex justify-content-between align-items-center ${isHighlighted ? 'active' : ''} ${isSelected ? 'bg-primary bg-opacity-25' : ''}"
                      id="searchItem-${idx}"
                      onmouseenter="setHighlightedIndex(${idx})"
                      onclick="selectProductById(${p.id})">
                     <div class="me-2 text-truncate">
-                        <div class="fw-bold text-white fs-6 text-truncate">
-                            ${highlightedName}
+                        <div class="fw-bold text-white fs-6 text-truncate d-flex align-items-center gap-1">
+                            <span>${highlightedName}</span>
                         </div>
                         <div class="text-white-50 small d-flex flex-wrap gap-2 align-items-center mt-1" style="font-size: 11px;">
+                            <span class="badge ${matBadgeClass} fw-bold" style="font-size: 10px;">${matBadgeText}</span>
+                            ${gussetBadge}
+                            ${p.width_cm > 0 ? `<span class="badge bg-dark border border-secondary text-white-50" style="font-size: 10px;">📏 ${p.width_cm} cm</span>` : ''}
                             ${p.sku ? `<span class="badge bg-secondary font-monospace">${highlightedSku}</span>` : ''}
                             <span>⚖️ Teórico: <strong class="text-info">${p.theoretical.toFixed(3)} Kg</strong>/mill</span>
                             <span>💰 Tarifa: <strong class="text-success">$${p.tariff.toFixed(2)} USD</strong></span>
@@ -1327,10 +1518,13 @@
             const width = parseFloat(document.getElementById('extrusionWidthInput')?.value) || 22;
             const hasGusset = document.getElementById('extrusionGussetSelect')?.value === '1';
             const gusset = hasGusset ? (parseFloat(document.getElementById('extrusionGussetInput')?.value) || 0) : 0;
+            const mat = document.getElementById('extrusionMaterialSelect')?.value || 'Baja Densidad';
             const avgWeight = qty > 0 ? (weight / qty) : weight;
 
-            badge.innerHTML = '<span class="badge bg-info text-dark fw-bold fs-6">🌀 BOBINA DE EXTRUSIÓN</span>';
-            details.innerHTML = `Manga: <strong>${width} cm</strong> ${hasGusset ? ('(Fuelle: ' + gusset + ' cm)') : 'Plana'} • <strong>${weight.toFixed(2)} Kg</strong>`;
+            const isAlta = mat.toUpperCase().includes('ALTA');
+            const matBadge = `<span class="badge ${isAlta ? 'bg-primary' : 'bg-info text-dark'} fw-bold" style="font-size: 10px;">${isAlta ? '🔷 ALTA' : '🔹 BAJA'}</span>`;
+            badge.innerHTML = `<span class="badge bg-info text-dark fw-bold fs-6">🌀 BOBINA DE EXTRUSIÓN</span> ${matBadge}`;
+            details.innerHTML = `Manga <strong>${mat}</strong>: <strong>${width} cm</strong> ${hasGusset ? ('(Fuelle: ' + gusset + ' cm)') : 'Plana'} • <strong>${weight.toFixed(2)} Kg</strong>`;
             earnBox.textContent = `+ ${qty} Bobina(s) registradas (${avgWeight.toFixed(2)} Kg/u)`;
             card.style.borderColor = '#0284c7';
             return;
