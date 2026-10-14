@@ -2655,10 +2655,37 @@ class BagFactoryWebController extends Controller
         $wasteWeight = (float)($request->waste_weight_kg ?: 0);
         $formulaId = $request->filled('production_formula_id') ? (int)$request->production_formula_id : null;
 
-        // --- FLUJO ESPECIAL: REGISTRO DE MERMA / PURGA DE CALIBRACIÓN DE EXTRUSIÓN ---
-        if ($isWasteRecord || ($wasteWeight > 0 && !$request->filled('product_id'))) {
+        $isExtrusionDirect = $request->boolean('is_extrusion_direct') || ($request->filled('extrusion_width_cm') && (float)$request->extrusion_width_cm > 0);
+
+        // --- FLUJO ESPECIAL: REGISTRO DE MERMA / PURGA / DEFECTO ---
+        if ($isWasteRecord || ($wasteWeight > 0 && !$request->filled('product_id') && !$isExtrusionDirect)) {
             $wasteKg = $wasteWeight > 0 ? $wasteWeight : (float)$request->weight;
-            
+            $wasteType = $request->get('waste_type', 'purga_calibracion_extrusion');
+            $wasteNotes = trim((string)$request->get('waste_notes', ''));
+
+            // Si hay bobina montada o especificada en el request (selladoras)
+            $sourceBobinaId = $request->filled('source_bobina_id')
+                ? (int)$request->source_bobina_id
+                : $shift->mounted_bobina_id;
+
+            $meta = [
+                'waste_type'            => $wasteType,
+                'waste_notes'           => $wasteNotes,
+                'production_formula_id' => $formulaId,
+                'recorded_by'           => $user->name,
+            ];
+
+            if ($sourceBobinaId) {
+                $sourceBob = BagProduction::find($sourceBobinaId);
+                if ($sourceBob) {
+                    $meta['source_bobina_id'] = $sourceBob->id;
+                    $meta['source_bobina_batch'] = $sourceBob->effective_batch_code;
+                    $meta['source_bobina_operator'] = $sourceBob->user?->name;
+                    $meta['source_bobina_machine'] = $sourceBob->shift?->machine?->name;
+                    $meta['source_bobina_product'] = $sourceBob->product?->name;
+                }
+            }
+
             $production = BagProduction::create([
                 'bag_shift_id'             => $shift->id,
                 'user_id'                  => $targetUser->id,
@@ -2682,15 +2709,16 @@ class BagFactoryWebController extends Controller
                 'labor_retained_amount'    => 0.00,
                 'qr_code'                  => 'WASTE-' . strtoupper(Str::random(10)),
                 'sync_id'                  => 'PROD-WASTE-' . Str::uuid(),
-                'metadata'                 => [
-                    'waste_type'             => 'purga_calibracion_extrusion',
-                    'production_formula_id'  => $formulaId,
-                    'recorded_by'            => $user->name,
-                ],
+                'metadata'                 => $meta,
             ]);
 
-            $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
-            return redirect()->route('operator.station', $redirectParams)->with('warning', "⚠️ Merma/Purga de calibración de {$wasteKg} Kg registrada correctamente.");
+            $labelMsg = ($wasteType === 'defecto_extrusion')
+                ? "⚠️ Merma por DEFECTO DE EXTRUSIÓN de {$wasteKg} Kg registrada (descontada del saldo de la bobina montada)."
+                : (($wasteType === 'merma_operativa_sellado')
+                    ? "✂️ Merma de calibración de selladora de {$wasteKg} Kg registrada."
+                    : "⚠️ Merma/Purga de extrusión de {$wasteKg} Kg registrada correctamente.");
+
+            return redirect()->route('operator.station', $redirectParams)->with('warning', $labelMsg);
         }
 
         // --- FLUJO ESPECIAL EXTRUSIÓN DIRECTA: BOBINA DE MANGA CONTINUA ---
@@ -2895,8 +2923,9 @@ class BagFactoryWebController extends Controller
         }
 
         $unitLabel = $product->is_variable_quantity ? "bobina(s)" : "millares";
+        $wasteFeedback = $wasteWeight > 0 ? " (+ {$wasteWeight} Kg de purga/merma)" : "";
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
-        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje de {$qty} {$unitLabel} registrado correctamente ({$production->weight_grade_label})");
+        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje de {$qty} {$unitLabel} registrado correctamente ({$production->weight_grade_label}){$wasteFeedback}");
     }
 
     public function operatorUpdateBatch(Request $request, $id)

@@ -241,6 +241,10 @@
                                 <span class="text-white-50 small">Bobinas de manga continua listas para montar en portarrollos</span>
                             </div>
                             <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm"
+                                        data-bs-toggle="modal" data-bs-target="#wasteRecordModal" title="Registrar merma operativa o defecto de material en sellado">
+                                    <span>⚠️</span> Registrar Merma / Defecto
+                                </button>
                                 {{-- Lector / Input Rápido de Código QR / SKU de Bobina --}}
                                 <form action="{{ route('operator.mount_bobina') }}" method="POST" class="d-inline-flex gap-1 align-items-center mb-0">
                                     @csrf
@@ -299,6 +303,10 @@
                                     </span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold py-1 px-2" style="font-size: 11px;"
+                                            data-bs-toggle="modal" data-bs-target="#wasteRecordModal" title="Registrar merma o defecto atribuible a esta bobina">
+                                        ⚠️ Registrar Merma / Defecto
+                                    </button>
                                     <button type="button" class="btn btn-outline-info btn-sm fw-bold py-1 px-2" style="font-size: 11px;" onclick="openProductDropdown()">
                                         🎯 Ver bolsas compatibles ({{ round($mWidth, 1) }} cm)
                                     </button>
@@ -557,6 +565,21 @@
                                     <span class="input-group-text bg-secondary text-white fw-bold">Kg</span>
                                 </div>
                             </div>
+
+                            {{-- Purga / Merma de Arranque Simultánea Opcional --}}
+                            <div class="mt-2">
+                                <label class="form-label text-white-50 small d-flex justify-content-between mb-1">
+                                    <span>⚠️ Purga / Merma de arranque en esta bobina (Kg) (Opcional):</span>
+                                    <span class="text-warning small" style="font-size: 11px;">Material calibrado/desechado</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-dark border-secondary text-warning">⚠️</span>
+                                    <input type="number" step="0.01" min="0" max="500" name="waste_weight_kg" id="wasteWeightInput"
+                                           class="form-control bg-dark text-warning border-secondary text-center fw-bold"
+                                           placeholder="0.00 (Opcional)">
+                                    <span class="input-group-text bg-dark border-secondary text-white-50">Kg</span>
+                                </div>
+                            </div>
                         </div>
                 @else
                     {{-- MODO SELLADORA / CONVERSIÓN: CATÁLOGO DE BOLSAS TERMINADAS --}}
@@ -784,31 +807,81 @@
                     <tbody>
                         @forelse($shiftProductions as $prod)
                             @if($prod->is_waste_record)
+                                @php
+                                    $wType = $prod->metadata['waste_type'] ?? 'purga_calibracion_extrusion';
+                                    $wNotes = $prod->metadata['waste_notes'] ?? '';
+                                    $srcBatch = $prod->metadata['source_bobina_batch'] ?? null;
+                                    $srcOp = $prod->metadata['source_bobina_operator'] ?? null;
+                                    $srcProd = $prod->metadata['source_bobina_product'] ?? null;
+                                @endphp
                                 <tr class="table-active bg-warning bg-opacity-10">
                                     <td class="ps-3 font-monospace text-white-50">
                                         {{ $prod->recorded_at ? $prod->recorded_at->format('h:i A') : '--' }}
                                     </td>
                                     <td>
-                                        <strong class="text-warning">⚠️ PURGA / MERMA DE CALIBRACIÓN</strong>
-                                        <span class="text-white-50 small d-block">
-                                            {{ $prod->formula ? 'Fórmula: ' . $prod->formula->name : 'Extrusión' }}
-                                        </span>
+                                        @if($wType === 'defecto_extrusion')
+                                            <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                                <span class="badge bg-danger text-white fw-bold">💥 DEFECTO EXTRUSIÓN</span>
+                                                @if($srcBatch)
+                                                    <span class="badge bg-dark border border-danger text-danger font-monospace" style="font-size: 11px;">
+                                                        Bobina Lote: {{ $srcBatch }}
+                                                    </span>
+                                                @endif
+                                                @if($srcOp)
+                                                    <span class="badge bg-dark border border-secondary text-white-50" style="font-size: 10px;">
+                                                        Extrusor: {{ $srcOp }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            <span class="text-white small d-block">
+                                                {{ $wNotes ? 'Falla reportada: ' . $wNotes : 'Material no conforme descartado en sellado' }}
+                                            </span>
+                                            <span class="text-white-50 small d-block" style="font-size: 10px;">
+                                                ℹ️ Descontado del saldo de la bobina montada (protección de nómina al sellador).
+                                            </span>
+                                        @elseif($wType === 'merma_operativa_sellado')
+                                            <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                                <span class="badge bg-warning text-dark fw-bold">✂️ MERMA SELLADORA</span>
+                                                <span class="badge bg-dark border border-secondary text-white-50" style="font-size: 10px;">
+                                                    Ajuste de máquina
+                                                </span>
+                                            </div>
+                                            <span class="text-white small d-block">
+                                                {{ $wNotes ? $wNotes : 'Calibración de cuchilla, temperatura o troquel' }}
+                                            </span>
+                                        @else
+                                            <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                                <span class="badge bg-warning text-dark fw-bold">⚠️ PURGA EXTRUSIÓN</span>
+                                                <span class="badge bg-dark border border-secondary text-white-50" style="font-size: 10px;">
+                                                    Boquilla / Calibre
+                                                </span>
+                                            </div>
+                                            <span class="text-white-50 small d-block">
+                                                {{ $prod->formula ? 'Fórmula: ' . $prod->formula->name : 'Purga de arranque de máquina extrusora' }}
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>
-                                        <span class="badge bg-dark font-monospace text-warning border border-warning">
-                                            MERMA-PURGA
+                                        <span class="badge bg-dark font-monospace {{ $wType === 'defecto_extrusion' ? 'text-danger border border-danger' : 'text-warning border border-warning' }}">
+                                            {{ $wType === 'defecto_extrusion' ? 'DEF-EXT' : ($wType === 'merma_operativa_sellado' ? 'MERMA-SEL' : 'MERMA-PURGA') }}
                                         </span>
                                     </td>
                                     <td class="text-center">
                                         <span class="badge bg-secondary text-white px-2 py-1">Registrado</span>
                                     </td>
                                     <td class="text-center text-white-50">--</td>
-                                    <td class="text-center font-monospace text-warning fw-bold">
+                                    <td class="text-center font-monospace {{ $wType === 'defecto_extrusion' ? 'text-danger' : 'text-warning' }} fw-bold">
                                         {{ number_format($prod->waste_weight_kg, 2) }} Kg
                                     </td>
                                     <td class="text-center text-white-50">--</td>
                                     <td class="text-center">
-                                        <span class="badge bg-warning text-dark fw-bold">MERMA / PURGA</span>
+                                        @if($wType === 'defecto_extrusion')
+                                            <span class="badge bg-danger text-white fw-bold">CARGO A EXTRUSIÓN</span>
+                                        @elseif($wType === 'merma_operativa_sellado')
+                                            <span class="badge bg-warning text-dark fw-bold">AJUSTE SELLADORA</span>
+                                        @else
+                                            <span class="badge bg-warning text-dark fw-bold">MERMA / PURGA</span>
+                                        @endif
                                     </td>
                                     <td class="text-center text-white-50 font-monospace">$0.00</td>
                                     <td class="text-end pe-3">
@@ -851,6 +924,11 @@
                                                         📏 {{ round($pWidth, 1) }} cm
                                                     </span>
                                                 @endif
+                                            @endif
+                                            @if((float)$prod->waste_weight_kg > 0)
+                                                <span class="badge bg-warning bg-opacity-25 text-warning border border-warning fw-bold" style="font-size: 10px;" title="Purga de calibración descartada en este pesaje">
+                                                    ⚠️ Purga: {{ number_format($prod->waste_weight_kg, 2) }} Kg
+                                                </span>
                                             @endif
                                         </div>
                                         <span class="text-white-50 small font-monospace">{{ $prod->product->sku ?? '' }}</span>
@@ -1722,13 +1800,13 @@
     </div>
 </div>
 
-{{-- MODAL PARA REGISTRAR MERMA / PURGA DE CALIBRACIÓN (EXTRUSIÓN) --}}
+{{-- MODAL PARA REGISTRAR MERMA / PURGA / DEFECTO --}}
 <div class="modal fade" id="wasteRecordModal" tabindex="-1" aria-labelledby="wasteRecordModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content text-white" style="background: #1e293b; border: 1px solid #f59e0b; border-radius: 14px;">
             <div class="modal-header border-secondary py-3">
                 <h5 class="modal-title fw-bold d-flex align-items-center gap-2 text-warning" id="wasteRecordModalLabel">
-                    <span>⚠️</span> Registrar Merma / Purga de Calibración
+                    <span>⚠️</span> Registrar Merma / Purga / Defecto
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
@@ -1739,20 +1817,61 @@
                 @if(!$user->isOperator())
                     <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
                 @endif
+                @if(!empty($mountedBobina))
+                    <input type="hidden" name="source_bobina_id" value="{{ $mountedBobina->id }}">
+                @endif
                 <div class="modal-body p-4">
-                    <div class="alert alert-warning border-0 bg-opacity-25 bg-warning text-warning small py-2 px-3 mb-3">
-                        <span>ℹ️</span> <strong>Purga de Boquilla / Calibración:</strong> Registra los kilogramos de material fundido descartado durante el ajuste del calibre o arranque de la extrusora.
-                    </div>
+                    @if($isExtrusionMachine)
+                        {{-- MODO EXTRUSIÓN: PURGA DE CALIBRACIÓN --}}
+                        <input type="hidden" name="waste_type" value="purga_calibracion_extrusion">
+                        <div class="alert alert-warning border-0 bg-opacity-25 bg-warning text-warning small py-2 px-3 mb-3">
+                            <span>ℹ️</span> <strong>Purga de Boquilla / Calibración:</strong> Registra los kilogramos de material fundido descartado durante el ajuste del calibre o arranque de la extrusora.
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label text-white-50 small fw-bold">🧪 Fórmula de Mezcla Usada:</label>
-                        <select name="production_formula_id" class="form-select bg-dark text-white border-secondary">
-                            <option value="">-- Sin Fórmula Específica --</option>
-                            @foreach($formulas as $form)
-                                <option value="{{ $form->id }}">{{ $form->name }} ({{ $form->code ?? 'S/C' }})</option>
-                            @endforeach
-                        </select>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label text-white-50 small fw-bold">🧪 Fórmula de Mezcla Usada:</label>
+                            <select name="production_formula_id" class="form-select bg-dark text-white border-secondary">
+                                <option value="">-- Sin Fórmula Específica --</option>
+                                @foreach($formulas as $form)
+                                    <option value="{{ $form->id }}">{{ $form->name }} ({{ $form->code ?? 'S/C' }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @else
+                        {{-- MODO SELLADORA: DEFECTO DE BOBINA O MERMA OPERATIVA --}}
+                        <div class="mb-3">
+                            <label class="form-label text-white fw-bold small">Origen / Causa de la Merma:</label>
+                            <select name="waste_type" id="wasteTypeSelect" class="form-select bg-dark text-white border-warning fw-bold" onchange="toggleWasteTypeHelp(this.value)">
+                                <option value="defecto_extrusion" selected>💥 Defecto de Bobina / Extrusión (Material con falla, descartado)</option>
+                                <option value="merma_operativa_sellado">✂️ Merma Operativa de Selladora (Ajuste de cuchilla, temperatura, troquel)</option>
+                            </select>
+                        </div>
+
+                        @if(!empty($mountedBobina))
+                            <div class="p-3 mb-3 rounded border border-warning bg-black bg-opacity-40" id="bobinaInfoAlert">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong class="text-warning small">📦 Bobina Montada Afectada:</strong>
+                                    <span class="badge bg-warning text-dark font-monospace">{{ $mountedBobina->effective_batch_code }}</span>
+                                </div>
+                                <div class="text-white-50 small">
+                                    <span>Operador Extrusor: <strong class="text-white">{{ $mountedBobina->user?->name ?? 'N/D' }}</strong></span> •
+                                    <span>Saldo Actual: <strong class="text-info">{{ number_format($mountedBobina->remaining_weight, 2) }} Kg</strong></span>
+                                </div>
+                                <div class="mt-2 text-warning small" id="wasteNoticeHelp" style="font-size: 11px;">
+                                    🛡️ <strong>Protección de Nómina:</strong> Esta merma se descontará del saldo de la bobina del extrusor y <u>NO penalizará</u> tu rendimiento ni tu destajo como sellador.
+                                </div>
+                            </div>
+                        @else
+                            <div class="alert alert-info py-2 px-3 small mb-3">
+                                <span>ℹ️ No hay bobina montada en este momento. La merma se registrará como ajuste operativo de selladora.</span>
+                            </div>
+                        @endif
+
+                        <div class="mb-3">
+                            <label class="form-label text-white-50 small fw-bold">📝 Motivo / Observaciones del Defecto:</label>
+                            <input type="text" name="waste_notes" class="form-control bg-dark text-white border-secondary" placeholder="Ej: Calibre irregular, manga pegada, fuelle torcido, corte disparejo...">
+                        </div>
+                    @endif
 
                     <div class="mb-3">
                         <label class="form-label text-white fw-bold small">⚖️ Kilos de Merma / Purga (Kg):</label>
@@ -1770,4 +1889,18 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleWasteTypeHelp(val) {
+    const notice = document.getElementById('wasteNoticeHelp');
+    if (!notice) return;
+    if (val === 'defecto_extrusion') {
+        notice.innerHTML = '🛡️ <strong>Protección de Nómina:</strong> Esta merma se descontará del saldo de la bobina del extrusor y <u>NO penalizará</u> tu rendimiento ni tu destajo como sellador.';
+        notice.className = 'mt-2 text-warning small';
+    } else {
+        notice.innerHTML = '✂️ <strong>Ajuste de Selladora:</strong> Merma operativa producida durante el cuadre de cuchilla, calor o troquel en esta máquina selladora.';
+        notice.className = 'mt-2 text-info small';
+    }
+}
+</script>
 @endsection

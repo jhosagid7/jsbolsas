@@ -643,4 +643,170 @@ class ExtrusionPhaseOneTest extends TestCase
         $this->assertEquals($bobina->id, $sealedProd->metadata['source_bobina_id']);
         $this->assertEquals($bobina->effective_batch_code, $sealedProd->metadata['source_bobina_batch']);
     }
+
+    /** @test */
+    public function sealer_can_record_extrusion_defect_waste_attributed_to_mounted_bobina()
+    {
+        $sealer = User::create([
+            'name'     => 'Pedro Sellador Defecto',
+            'email'    => 'pedro.defecto.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $sealerMachine = BagMachine::create([
+            'name' => 'Selladora Lateral 02',
+            'code' => 'SEL02',
+            'type' => 'selladora',
+            'is_active' => true,
+        ]);
+
+        $shiftExt = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        $bobina = BagProduction::create([
+            'bag_shift_id'          => $shiftExt->id,
+            'user_id'               => $this->operator->id,
+            'product_id'            => $this->mangaProduct->id,
+            'production_formula_id' => $this->formula->id,
+            'quantity'              => 1,
+            'weight'                => 25.0,
+            'original_weight'       => 25.0,
+            'status'                => 'approved',
+            'batch_code'            => 'BOB-ORIG-01',
+            'is_waste_record'       => false,
+            'recorded_at'           => now(),
+            'sync_id'               => 'PROD-' . uniqid(),
+        ]);
+
+        $sealerShift = BagShift::create([
+            'user_id'    => $sealer->id,
+            'machine_id' => $sealerMachine->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-SEL-' . uniqid(),
+        ]);
+        $sealerShift->mountBobina($bobina->id);
+
+        $response = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'is_waste_record' => 1,
+            'waste_type'      => 'defecto_extrusion',
+            'waste_weight_kg' => 3.5,
+            'waste_notes'     => 'Manga pegada y calibre disparejo en el centro',
+            'machine_id'      => $sealerMachine->id,
+        ]);
+
+        $response->assertRedirect(route('operator.station'));
+        $response->assertSessionHas('warning');
+
+        // Verificar registro de merma
+        $wasteRecord = BagProduction::where('is_waste_record', true)
+            ->where('waste_weight_kg', 3.5)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($wasteRecord);
+        $this->assertEquals('defecto_extrusion', $wasteRecord->metadata['waste_type']);
+        $this->assertEquals($bobina->id, $wasteRecord->metadata['source_bobina_id']);
+        $this->assertEquals($bobina->effective_batch_code, $wasteRecord->metadata['source_bobina_batch']);
+        $this->assertEquals($this->operator->name, $wasteRecord->metadata['source_bobina_operator']);
+        $this->assertEquals(0.00, $wasteRecord->labor_earned_amount);
+
+        // Verificar que el saldo de la bobina madre disminuyó automáticamente por el descarte atribuido
+        $bobinaFresh = $bobina->fresh();
+        $this->assertEquals(3.5, (float)$bobinaFresh->consumed_weight);
+        $this->assertEquals(21.5, (float)$bobinaFresh->remaining_weight);
+    }
+
+    /** @test */
+    public function sealer_can_record_sealing_calibration_waste()
+    {
+        $sealer = User::create([
+            'name'     => 'Pedro Sellador Merma',
+            'email'    => 'pedro.merma.' . uniqid() . '@bolsas.test',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $sealerMachine = BagMachine::create([
+            'name' => 'Selladora Lateral 03',
+            'code' => 'SEL03',
+            'type' => 'selladora',
+            'is_active' => true,
+        ]);
+
+        $sealerShift = BagShift::create([
+            'user_id'    => $sealer->id,
+            'machine_id' => $sealerMachine->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-SEL-' . uniqid(),
+        ]);
+
+        $response = $this->actingAs($sealer)->post(route('operator.store_batch'), [
+            'is_waste_record' => 1,
+            'waste_type'      => 'merma_operativa_sellado',
+            'waste_weight_kg' => 1.25,
+            'waste_notes'     => 'Calibración de temperatura de teflón y cuchilla',
+            'machine_id'      => $sealerMachine->id,
+        ]);
+
+        $response->assertRedirect(route('operator.station'));
+        $response->assertSessionHas('warning');
+
+        $wasteRecord = BagProduction::where('is_waste_record', true)
+            ->where('waste_weight_kg', 1.25)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($wasteRecord);
+        $this->assertEquals('merma_operativa_sellado', $wasteRecord->metadata['waste_type']);
+        $this->assertEquals(0.00, $wasteRecord->labor_earned_amount);
+    }
+
+    /** @test */
+    public function extruder_can_record_bobina_with_simultaneous_startup_waste()
+    {
+        $shift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        $response = $this->actingAs($this->operator)->post(route('operator.store_batch'), [
+            'is_extrusion_direct'     => 1,
+            'extrusion_width_cm'      => 22.0,
+            'extrusion_has_gusset'    => 1,
+            'extrusion_gusset_cm'     => 5.0,
+            'extrusion_caliber'       => 3.0,
+            'extrusion_material_type' => 'Alta Densidad',
+            'production_formula_id'   => $this->formula->id,
+            'quantity'                => 1,
+            'weight'                  => 26.50,
+            'waste_weight_kg'         => 1.80,
+            'machine_id'              => $this->extruder->id,
+            'print_mode'              => 'save_only',
+        ]);
+
+        $response->assertRedirect(route('operator.station'));
+        $response->assertSessionHas('success');
+
+        $prod = BagProduction::where('weight', 26.50)->latest('id')->first();
+        $this->assertNotNull($prod);
+        $this->assertEquals(1.80, (float)$prod->waste_weight_kg);
+        $this->assertFalse((bool)$prod->is_waste_record);
+        $this->assertStringContainsString('BOB-ALTA-22-C3-F5', $prod->product->sku);
+    }
 }
+
