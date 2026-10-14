@@ -2686,6 +2686,13 @@ class BagFactoryWebController extends Controller
                 }
             }
 
+            if ($formulaId && $wasteKg > 0 && ($wasteType === 'purga_calibracion_extrusion' || !$sourceBobinaId)) {
+                $deductions = $this->deductRawMaterialsFromPlanta($formulaId, $wasteKg);
+                if (!empty($deductions)) {
+                    $meta['raw_material_deductions'] = $deductions;
+                }
+            }
+
             $production = BagProduction::create([
                 'bag_shift_id'             => $shift->id,
                 'user_id'                  => $targetUser->id,
@@ -2889,6 +2896,17 @@ class BagFactoryWebController extends Controller
             }
         }
 
+        // Descuento automático en tiempo real de Planta Tolva por receta activa
+        if ($isBobinaProduction && $formulaId) {
+            $totalExtrusionKg = $weight + $wasteWeight;
+            if ($totalExtrusionKg > 0) {
+                $deductions = $this->deductRawMaterialsFromPlanta($formulaId, $totalExtrusionKg);
+                if (!empty($deductions)) {
+                    $metadataPayload['raw_material_deductions'] = $deductions;
+                }
+            }
+        }
+
         $isDirectPrint = ($request->get('print_mode') === 'direct_print');
 
         $production = BagProduction::create([
@@ -3014,6 +3032,24 @@ class BagFactoryWebController extends Controller
         $shift = $prod->shift;
         $prodOwnerId = $prod->user_id;
         $qty = $prod->quantity;
+
+        // Restaurar materias primas deducidas automáticamente si existían
+        $deductions = $prod->metadata['raw_material_deductions'] ?? [];
+        if (is_array($deductions) && !empty($deductions)) {
+            foreach ($deductions as $d) {
+                $matId = (int)($d['raw_material_id'] ?? 0);
+                $kg = (float)($d['quantity_kg'] ?? 0);
+                if ($matId > 0 && $kg > 0) {
+                    $stock = RawMaterialStock::getOrCreate($matId, 'planta');
+                    $newKg = (float)$stock->total_kg + $kg;
+                    $stock->update([
+                        'total_kg'    => $newKg,
+                        'sacos_count' => round($newKg / 25.0, 2),
+                    ]);
+                }
+            }
+        }
+
         $prod->delete();
 
         $shift?->recalculateFinancials();
@@ -3193,5 +3229,45 @@ class BagFactoryWebController extends Controller
 
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
         return redirect()->route('operator.station', $redirectParams)->with('success', '✅ Bobina marcada como agotada/terminada y retirada de la selladora.');
+    }
+
+    /**
+     * Descuenta automáticamente materias primas de Planta Tolva según la fórmula activa y el peso producido.
+     */
+    protected function deductRawMaterialsFromPlanta(?int $formulaId, float $weightKg): array
+    {
+        if (!$formulaId || $weightKg <= 0) {
+            return [];
+        }
+
+        $formula = ProductionFormula::find($formulaId);
+        if (!$formula) {
+            return [];
+        }
+
+        $breakdown = $formula->calculateIngredientBreakdown($weightKg);
+        $deductions = [];
+
+        foreach ($breakdown as $item) {
+            $matId = (int)$item['raw_material_id'];
+            $kgConsumed = (float)$item['quantity_kg'];
+            if ($matId > 0 && $kgConsumed > 0) {
+                $stock = RawMaterialStock::getOrCreate($matId, 'planta');
+                $newKg = max(0, (float)$stock->total_kg - $kgConsumed);
+                $stock->update([
+                    'total_kg'    => $newKg,
+                    'sacos_count' => round($newKg / 25.0, 2),
+                ]);
+
+                $deductions[] = [
+                    'raw_material_id'   => $matId,
+                    'raw_material_name' => $item['raw_material_name'],
+                    'percentage'        => $item['percentage'],
+                    'quantity_kg'       => $kgConsumed,
+                ];
+            }
+        }
+
+        return $deductions;
     }
 }

@@ -6,6 +6,7 @@ use App\Models\BagMachine;
 use App\Models\BagProduct;
 use App\Models\BagProduction;
 use App\Models\BagShift;
+use App\Models\ProductionFormula;
 use App\Models\RawMaterial;
 use App\Models\RawMaterialAudit;
 use App\Models\RawMaterialStock;
@@ -198,5 +199,237 @@ class RawMaterialTwoWarehousesAndAuditTest extends TestCase
             'variance_kg'        => 10.0,
             'status'             => 'approved',
         ]);
+    }
+
+    /** @test */
+    public function it_automatically_deducts_ingredients_from_plant_hopper_when_storing_extrusion_bobina()
+    {
+        $linealMaterial = RawMaterial::create([
+            'name'           => 'Resina Lineal 0209',
+            'code'           => '0209',
+            'base_price'     => 2.40,
+            'transport_cost' => 0.10,
+            'surcharge'      => 0.10,
+            'final_price'    => 2.60,
+            'is_active'      => true,
+        ]);
+
+        // 1. Stock inicial en Planta: 100 Kg de Virgen y 100 Kg de Lineal
+        RawMaterialStock::create([
+            'raw_material_id' => $this->virgenMaterial->id,
+            'warehouse_type'  => 'planta',
+            'sacos_count'     => 4.0,
+            'total_kg'        => 100.0,
+        ]);
+
+        RawMaterialStock::create([
+            'raw_material_id' => $linealMaterial->id,
+            'warehouse_type'  => 'planta',
+            'sacos_count'     => 4.0,
+            'total_kg'        => 100.0,
+        ]);
+
+        // 2. Crear fórmula activa: 70% Virgen + 30% Lineal
+        $formula = ProductionFormula::create([
+            'name'      => 'Fórmula Cristal 70-30',
+            'code'      => 'FC7030',
+            'is_active' => true,
+        ]);
+        $formula->createNewVersion([
+            ['raw_material_id' => $this->virgenMaterial->id, 'quantity_kg' => 70.0],
+            ['raw_material_id' => $linealMaterial->id, 'quantity_kg' => 30.0],
+        ], $this->admin->id);
+
+        // 3. Crear turno de extrusora
+        $operator = User::create([
+            'name'     => 'Operario Extrusor Test',
+            'email'    => 'operario.deduct.' . uniqid() . '@test.com',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $shift = BagShift::create([
+            'user_id'    => $operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        // 4. Extruir y pesar bobina de 20.0 Kg
+        $response = $this->actingAs($operator)->post(route('operator.store_batch'), [
+            'is_extrusion_direct'     => 1,
+            'extrusion_width_cm'      => 22.0,
+            'extrusion_has_gusset'    => 1,
+            'extrusion_gusset_cm'     => 5.0,
+            'extrusion_caliber'       => 3.0,
+            'extrusion_material_type' => 'Alta Densidad',
+            'production_formula_id'   => $formula->id,
+            'quantity'                => 1,
+            'weight'                  => 20.0,
+            'waste_weight_kg'         => 0.0,
+            'machine_id'              => $this->extruder->id,
+            'print_mode'              => 'save_only',
+        ]);
+
+        $response->assertRedirect(route('operator.station'));
+        $response->assertSessionHas('success');
+
+        // 5. Verificar que en Planta Tolva se rebajaron exactamente los Kg por receta:
+        // Virgen: 100 - (20 * 0.70) = 86.0 Kg
+        // Lineal: 100 - (20 * 0.30) = 94.0 Kg
+        $stockVirgen = RawMaterialStock::where('raw_material_id', $this->virgenMaterial->id)
+            ->where('warehouse_type', 'planta')
+            ->first();
+        $this->assertEquals(86.0, (float)$stockVirgen->total_kg);
+
+        $stockLineal = RawMaterialStock::where('raw_material_id', $linealMaterial->id)
+            ->where('warehouse_type', 'planta')
+            ->first();
+        $this->assertEquals(94.0, (float)$stockLineal->total_kg);
+
+        // 6. Verificar que la producción guardó la trazabilidad de deducciones en metadata
+        $prod = BagProduction::where('weight', 20.0)->latest('id')->first();
+        $this->assertNotNull($prod);
+        $this->assertNotEmpty($prod->metadata['raw_material_deductions']);
+        $this->assertEquals(14.0, (float)$prod->metadata['raw_material_deductions'][0]['quantity_kg']);
+        $this->assertEquals(6.0, (float)$prod->metadata['raw_material_deductions'][1]['quantity_kg']);
+    }
+
+    /** @test */
+    public function it_restores_plant_hopper_stock_when_preloaded_bobina_is_deleted()
+    {
+        $linealMaterial = RawMaterial::create([
+            'name'           => 'Resina Lineal 0209 B',
+            'code'           => '0209B',
+            'base_price'     => 2.40,
+            'transport_cost' => 0.10,
+            'surcharge'      => 0.10,
+            'final_price'    => 2.60,
+            'is_active'      => true,
+        ]);
+
+        RawMaterialStock::create([
+            'raw_material_id' => $this->virgenMaterial->id,
+            'warehouse_type'  => 'planta',
+            'sacos_count'     => 4.0,
+            'total_kg'        => 100.0,
+        ]);
+
+        RawMaterialStock::create([
+            'raw_material_id' => $linealMaterial->id,
+            'warehouse_type'  => 'planta',
+            'sacos_count'     => 4.0,
+            'total_kg'        => 100.0,
+        ]);
+
+        $formula = ProductionFormula::create([
+            'name'      => 'Fórmula Cristal 50-50',
+            'code'      => 'FC5050',
+            'is_active' => true,
+        ]);
+        $formula->createNewVersion([
+            ['raw_material_id' => $this->virgenMaterial->id, 'quantity_kg' => 50.0],
+            ['raw_material_id' => $linealMaterial->id, 'quantity_kg' => 50.0],
+        ], $this->admin->id);
+
+        $operator = User::create([
+            'name'     => 'Operario Delete Test',
+            'email'    => 'operario.del.' . uniqid() . '@test.com',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $shift = BagShift::create([
+            'user_id'    => $operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        // Pesar bobina de 30 Kg (15 Kg de cada material)
+        $this->actingAs($operator)->post(route('operator.store_batch'), [
+            'is_extrusion_direct'     => 1,
+            'extrusion_width_cm'      => 22.0,
+            'extrusion_has_gusset'    => 1,
+            'extrusion_gusset_cm'     => 5.0,
+            'extrusion_caliber'       => 3.0,
+            'extrusion_material_type' => 'Alta Densidad',
+            'production_formula_id'   => $formula->id,
+            'quantity'                => 1,
+            'weight'                  => 30.0,
+            'machine_id'              => $this->extruder->id,
+            'print_mode'              => 'save_only',
+        ]);
+
+        $prod = BagProduction::where('weight', 30.0)->latest('id')->first();
+        $this->assertNotNull($prod);
+
+        // Verificar que bajó a 85 Kg
+        $this->assertEquals(85.0, (float)RawMaterialStock::where('raw_material_id', $this->virgenMaterial->id)->where('warehouse_type', 'planta')->value('total_kg'));
+
+        // Operador elimina el pesaje no impreso
+        $delResp = $this->actingAs($operator)->delete(route('operator.destroy_batch', $prod->id));
+        $delResp->assertRedirect(route('operator.station'));
+
+        // Verificar que el stock en Planta Tolva fue restaurado a 100 Kg
+        $this->assertEquals(100.0, (float)RawMaterialStock::where('raw_material_id', $this->virgenMaterial->id)->where('warehouse_type', 'planta')->value('total_kg'));
+        $this->assertEquals(100.0, (float)RawMaterialStock::where('raw_material_id', $linealMaterial->id)->where('warehouse_type', 'planta')->value('total_kg'));
+    }
+
+    /** @test */
+    public function it_deducts_ingredients_proportionally_when_recording_extrusion_purge_waste()
+    {
+        RawMaterialStock::create([
+            'raw_material_id' => $this->virgenMaterial->id,
+            'warehouse_type'  => 'planta',
+            'sacos_count'     => 4.0,
+            'total_kg'        => 100.0,
+        ]);
+
+        $formula = ProductionFormula::create([
+            'name'      => 'Fórmula 100% Virgen',
+            'code'      => 'F100V',
+            'is_active' => true,
+        ]);
+        $formula->createNewVersion([
+            ['raw_material_id' => $this->virgenMaterial->id, 'quantity_kg' => 100.0],
+        ], $this->admin->id);
+
+        $operator = User::create([
+            'name'     => 'Operario Purga Test',
+            'email'    => 'operario.purge.' . uniqid() . '@test.com',
+            'password' => bcrypt('password123'),
+            'role'     => 'Operario',
+        ]);
+
+        $shift = BagShift::create([
+            'user_id'    => $operator->id,
+            'machine_id' => $this->extruder->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+            'sync_id'    => 'SHIFT-EXT-' . uniqid(),
+        ]);
+
+        // Registrar 4.5 Kg de purga de calibración
+        $response = $this->actingAs($operator)->post(route('operator.store_batch'), [
+            'machine_id'            => $this->extruder->id,
+            'is_waste_record'       => 1,
+            'waste_type'            => 'purga_calibracion_extrusion',
+            'production_formula_id' => $formula->id,
+            'waste_weight_kg'       => 4.5,
+        ]);
+
+        $response->assertRedirect(route('operator.station'));
+
+        // El stock de virgen en Planta debe haber bajado de 100.0 a 95.5 Kg
+        $stockVirgen = RawMaterialStock::where('raw_material_id', $this->virgenMaterial->id)
+            ->where('warehouse_type', 'planta')
+            ->first();
+        $this->assertEquals(95.5, (float)$stockVirgen->total_kg);
     }
 }

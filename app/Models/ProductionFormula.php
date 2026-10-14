@@ -131,4 +131,39 @@ class ProductionFormula extends Model
             ->latest('valid_from')
             ->first();
     }
+
+    /**
+     * Calcula el desglose proporcional de materias primas para un peso producido total (Kg)
+     * basado en la versión activa de la fórmula.
+     */
+    public function calculateIngredientBreakdown(float $totalWeightKg): array
+    {
+        if ($totalWeightKg <= 0) {
+            return [];
+        }
+
+        $version = $this->currentVersion ?: $this->versions()->where('is_active', true)->first();
+        if (!$version || (float)$version->total_kg <= 0) {
+            return [];
+        }
+
+        $breakdown = [];
+        $items = $version->items()->with('rawMaterial')->get();
+
+        foreach ($items as $item) {
+            $prop = (float)$item->quantity_kg / (float)$version->total_kg;
+            $kgConsumed = round($totalWeightKg * $prop, 4);
+
+            $breakdown[] = [
+                'raw_material_id'   => $item->raw_material_id,
+                'raw_material_name' => $item->rawMaterial?->name ?? 'Insumo #' . $item->raw_material_id,
+                'raw_material_code' => $item->rawMaterial?->code ?? '',
+                'percentage'        => round($prop * 100, 2),
+                'quantity_kg'       => $kgConsumed,
+                'sacos_count'       => round($kgConsumed / 25.0, 4),
+            ];
+        }
+
+        return $breakdown;
+    }
 }

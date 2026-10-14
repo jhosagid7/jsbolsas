@@ -109,10 +109,18 @@
                             <td class="text-center font-monospace text-white-50">
                                 {{ number_format($pKg, 2) }} Kg
                             </td>
-                            <td class="text-center font-monospace fs-6 fw-bold text-success">
+                            @php
+                                $plantaClass = $lKg <= 0 ? 'text-danger' : ($lKg <= 25.0 ? 'text-warning' : 'text-success');
+                            @endphp
+                            <td class="text-center font-monospace fs-6 fw-bold {{ $plantaClass }}">
                                 {{ number_format($lSacos, 1) }}
+                                @if($lKg <= 0)
+                                    <span class="badge bg-danger text-white ms-1" style="font-size: 9px;" title="Agotado en Planta Tolva">AGOTADO</span>
+                                @elseif($lKg <= 25.0)
+                                    <span class="badge bg-warning text-dark ms-1" style="font-size: 9px;" title="Stock bajo en Planta Tolva">⚠️ Reponer</span>
+                                @endif
                             </td>
-                            <td class="text-center font-monospace text-white-50">
+                            <td class="text-center font-monospace {{ $plantaClass }}">
                                 {{ number_format($lKg, 2) }} Kg
                             </td>
                             <td class="text-end pe-3">
