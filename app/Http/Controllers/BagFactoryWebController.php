@@ -3317,6 +3317,13 @@ class BagFactoryWebController extends Controller
             return back()->with('error', 'Error al generar el respaldo: ' . ($result['message'] ?? 'Error desconocido'));
         }
 
+        // Subir automáticamente a Google Drive
+        try {
+            $backupService->uploadToGoogleDrive($result['path']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Aviso subida Google Drive en descarga web: " . $e->getMessage());
+        }
+
         return response()->download($result['path'], $result['filename'], [
             'Content-Type' => 'application/gzip',
         ]);

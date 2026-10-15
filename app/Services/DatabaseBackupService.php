@@ -205,6 +205,31 @@ class DatabaseBackupService
     }
 
     /**
+     * Resuelve el binario ejecutable de Rclone en Linux o Windows
+     */
+    public function resolveRcloneBinary(): ?string
+    {
+        if (file_exists('C:/laragon/bin/rclone/rclone.exe')) {
+            return 'C:/laragon/bin/rclone/rclone.exe';
+        }
+
+        if (file_exists('/usr/bin/rclone')) {
+            return '/usr/bin/rclone';
+        }
+
+        $cmd = PHP_OS_FAMILY === 'Windows' ? 'where.exe rclone' : 'which rclone';
+        $res = Process::run($cmd);
+        if ($res->successful()) {
+            $lines = explode(PHP_EOL, trim($res->output()));
+            if (!empty($lines[0]) && file_exists(trim($lines[0]))) {
+                return trim($lines[0]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Sube un archivo de respaldo directamente a Google Drive en la carpeta designada
      */
     public function uploadToGoogleDrive(string $filePath, ?string $folderId = null): array
@@ -218,13 +243,6 @@ class DatabaseBackupService
             ];
         }
 
-        if (!file_exists($this->googleKeyPath)) {
-            return [
-                'success' => false,
-                'message' => "No se encontró el archivo de credenciales de Google Drive en: {$this->googleKeyPath}",
-            ];
-        }
-
         if (!file_exists($filePath)) {
             return [
                 'success' => false,
@@ -234,10 +252,10 @@ class DatabaseBackupService
 
         // 1. Si Rclone está instalado y configurado en el servidor, subir directamente como usuario (5 TB)
         try {
-            $rcloneCheck = Process::run('which rclone');
-            if ($rcloneCheck->successful() && !empty(trim($rcloneCheck->output()))) {
+            $rcloneBin = $this->resolveRcloneBinary();
+            if ($rcloneBin) {
                 $dest = 'gdrive:Respaldos JSBolsas';
-                $rcloneRun = Process::timeout(180)->run(sprintf('rclone copy %s %s', escapeshellarg($filePath), escapeshellarg($dest)));
+                $rcloneRun = Process::timeout(180)->run(sprintf('"%s" copy "%s" "%s"', $rcloneBin, $filePath, $dest));
                 if ($rcloneRun->successful()) {
                     Log::info("Backup {$filePath} subido exitosamente a Google Drive vía Rclone.");
                     return [
