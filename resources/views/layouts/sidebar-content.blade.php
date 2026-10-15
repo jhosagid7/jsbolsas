@@ -98,6 +98,11 @@
     </div>
 @endif
 
+<!-- Semáforo de Sincronización Nube -->
+<div class="px-1 mt-2">
+    @include('components.cloud_sync_widget')
+</div>
+
 <!-- Perfil de Usuario y Cierre de Sesión al Fondo -->
 <div class="mt-auto pt-3 border-top border-secondary-subtle">
     <div class="px-2 mb-2">

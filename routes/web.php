@@ -129,6 +129,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/operario/bobina/montar', [BagFactoryWebController::class, 'operatorMountBobina'])->name('operator.mount_bobina');
     Route::post('/operario/bobina/desmontar', [BagFactoryWebController::class, 'operatorUnmountBobina'])->name('operator.unmount_bobina');
     Route::post('/operario/bobina/agotar', [BagFactoryWebController::class, 'operatorMarkBobinaConsumed'])->name('operator.mark_bobina_consumed');
+
+    // Sincronización Nube (Estado y Disparo Manual)
+    Route::get('/cloud-sync/status', [BagFactoryWebController::class, 'cloudSyncStatus'])->name('cloud_sync.status');
+    Route::post('/cloud-sync/manual', [BagFactoryWebController::class, 'cloudSyncManual'])->name('cloud_sync.manual');
 });
 
 require __DIR__ . '/auth.php';

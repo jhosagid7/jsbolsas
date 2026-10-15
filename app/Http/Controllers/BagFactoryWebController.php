@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use App\Services\CloudSyncService;
 
 class BagFactoryWebController extends Controller
 {
@@ -3166,11 +3167,49 @@ class BagFactoryWebController extends Controller
             'end_time' => now(),
         ]);
 
+        $syncMsg = '';
+        try {
+            $syncService = app(CloudSyncService::class);
+            $syncResult = $syncService->syncAll();
+            if (!empty($syncResult['success'])) {
+                $syncMsg = ' ☁️ Sincronizado con el VPS con éxito. Puede apagar el equipo con seguridad.';
+            } else {
+                $syncMsg = ' ⚠️ Turno guardado localmente (Sin conexión con VPS). Se sincronizará automáticamente.';
+            }
+        } catch (\Exception $e) {
+            $syncMsg = ' ⚠️ Turno guardado localmente (Sin conexión con VPS).';
+        }
+
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id'))
             ? ['operator_id' => $shift->user_id]
             : [];
 
-        return redirect()->route('operator.station', $redirectParams)->with('success', 'Turno cerrado con éxito.');
+        return redirect()->route('operator.station', $redirectParams)->with('success', 'Turno cerrado con éxito.' . $syncMsg);
+    }
+
+    /**
+     * Devuelve el estado de sincronización con la nube para el semáforo de la UI
+     */
+    public function cloudSyncStatus(CloudSyncService $syncService)
+    {
+        $lastSync = $syncService->getLastSyncTime();
+        $pending = $syncService->getPendingCount();
+
+        return response()->json([
+            'pending_count' => $pending,
+            'last_sync'     => $lastSync ? $lastSync->diffForHumans() : 'Nunca',
+            'last_sync_at'  => $lastSync ? $lastSync->format('d/m/Y H:i') : null,
+            'node_role'     => $syncService->getNodeRole(),
+        ]);
+    }
+
+    /**
+     * Dispara una sincronización manual a demanda desde la interfaz de usuario
+     */
+    public function cloudSyncManual(CloudSyncService $syncService)
+    {
+        $result = $syncService->syncAll();
+        return response()->json($result);
     }
 
     /**

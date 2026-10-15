@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BagFactoryApiController;
 use App\Http\Controllers\Api\BagsProductionApiController;
+use App\Http\Controllers\Api\CloudSyncApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -57,4 +58,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/lifting/scan/{code}', [BagFactoryApiController::class, 'scanQr']);
         Route::post('/lifting/receive', [BagFactoryApiController::class, 'receiveLifting']);
     });
+});
+
+// Cloud Sync M2M Endpoints (Protected by X-Sync-Token inside controller)
+Route::prefix('cloud-sync')->group(function () {
+    Route::post('/handshake', [CloudSyncApiController::class, 'handshake']);
+    Route::post('/push', [CloudSyncApiController::class, 'push']);
+    Route::post('/pull', [CloudSyncApiController::class, 'pull']);
 });

@@ -31,4 +31,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'cloud_sync' => [
+        'url' => env('CLOUD_SYNC_URL', 'https://bolsas.plasticosmyf.com'),
+        'token' => env('CLOUD_SYNC_TOKEN', 'jsbolsas_secure_sync_token_2026'),
+        'node_role' => env('NODE_ROLE', 'local'),
+    ],
+
 ];

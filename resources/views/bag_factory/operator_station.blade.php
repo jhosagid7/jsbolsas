@@ -38,7 +38,7 @@
             @endif
 
             @if($activeShift)
-                <form action="{{ route('operator.close_shift') }}" method="POST" onsubmit="return confirm('¿Seguro que deseas cerrar tu turno de trabajo actual?');">
+                <form action="{{ route('operator.close_shift') }}" method="POST" onsubmit="return confirm('¿Seguro que deseas cerrar tu turno de trabajo actual? Al confirmar, el sistema intentará sincronizar automáticamente con el VPS en la nube antes de que apagues el equipo.');">
                     @csrf
                     <input type="hidden" name="shift_id" value="{{ $activeShift->id }}">
                     @if(!$user->isOperator())
@@ -51,6 +51,9 @@
             @endif
         </div>
     </div>
+
+    {{-- Widget de Sincronización Bidireccional con VPS --}}
+    @include('components.cloud_sync_widget')
 
     {{-- Alertas de Sesión --}}
     @if(session('success'))
