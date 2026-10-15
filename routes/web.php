@@ -133,6 +133,9 @@ Route::middleware('auth')->group(function () {
     // Sincronización Nube (Estado y Disparo Manual)
     Route::get('/cloud-sync/status', [BagFactoryWebController::class, 'cloudSyncStatus'])->name('cloud_sync.status');
     Route::post('/cloud-sync/manual', [BagFactoryWebController::class, 'cloudSyncManual'])->name('cloud_sync.manual');
+
+    // Actualización del Sistema desde GitHub con 1 Clic (Solo SuperAdmin)
+    Route::post('/sistema/actualizar', [BagFactoryWebController::class, 'systemUpdate'])->name('system.update');
 });
 
 require __DIR__ . '/auth.php';

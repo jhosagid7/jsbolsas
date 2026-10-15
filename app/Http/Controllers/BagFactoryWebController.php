@@ -22,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use App\Services\CloudSyncService;
 
@@ -3210,6 +3211,84 @@ class BagFactoryWebController extends Controller
     {
         $result = $syncService->syncAll();
         return response()->json($result);
+    }
+
+    /**
+     * Ejecuta la actualización segura del sistema desde GitHub vía web (Solo SuperAdmin)
+     */
+    public function systemUpdate(Request $request, CloudSyncService $syncService)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isSuperAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Acceso denegado: Solo el Super Administrador puede actualizar el sistema.',
+            ], 403);
+        }
+
+        $nodeRole = $syncService->getNodeRole();
+        $basePath = base_path();
+        $outputLogs = [];
+
+        try {
+            // Si es nodo local en planta, asegurar los registros pendientes primero
+            if ($nodeRole === 'local') {
+                $outputLogs[] = "1. Subiendo pesajes y registros pendientes al VPS...";
+                try {
+                    $pushResult = $syncService->pushDeltas();
+                    $outputLogs[] = "   ✓ " . ($pushResult['message'] ?? 'Deltas procesados.');
+                } catch (\Exception $e) {
+                    $outputLogs[] = "   ⚠️ Advertencia en subida previa: " . $e->getMessage();
+                }
+            }
+
+            // Descargar código oficial desde GitHub
+            $outputLogs[] = "2. Descargando última versión de GitHub (main)...";
+            $gitFetch = Process::path($basePath)->run('git fetch origin main');
+            if (!$gitFetch->successful()) {
+                throw new \Exception('Error al contactar GitHub: ' . $gitFetch->errorOutput());
+            }
+
+            $gitReset = Process::path($basePath)->run('git reset --hard origin/main');
+            if (!$gitReset->successful()) {
+                throw new \Exception('Error al aplicar cambios de Git: ' . $gitReset->errorOutput());
+            }
+            $outputLogs[] = "   ✓ Código actualizado a: " . trim($gitReset->output());
+
+            // Migraciones de Base de Datos
+            $outputLogs[] = "3. Aplicando migraciones de base de datos...";
+            $migrate = Process::path($basePath)->run('php artisan migrate --force');
+            $outputLogs[] = "   ✓ " . trim($migrate->output());
+
+            // Limpiar y regenerar cachés
+            $outputLogs[] = "4. Optimizando cachés del sistema...";
+            Process::path($basePath)->run('php artisan optimize:clear');
+            Process::path($basePath)->run('php artisan view:cache');
+            $outputLogs[] = "   ✓ Caché de vistas y rutas regenerada.";
+
+            // Si es local, descargar datos y catálogos nuevos desde el VPS
+            if ($nodeRole === 'local') {
+                $outputLogs[] = "5. Descargando fórmulas y precios nuevos desde el VPS...";
+                try {
+                    $pullResult = $syncService->pullDeltas();
+                    $outputLogs[] = "   ✓ " . ($pullResult['message'] ?? 'Catálogos actualizados.');
+                } catch (\Exception $e) {
+                    $outputLogs[] = "   ⚠️ Sincronización de bajada pendiente: " . $e->getMessage();
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => '¡Sistema actualizado con éxito a la última versión de GitHub!',
+                'logs'    => $outputLogs,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error durante la actualización: ' . $e->getMessage(),
+                'logs'    => $outputLogs,
+            ], 500);
+        }
     }
 
     /**

@@ -17,11 +17,17 @@
             </div>
         </div>
 
-        <div>
+        <div class="d-flex align-items-center gap-1">
             <button type="button" class="btn-cloud-sync-manual btn btn-outline-info btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;">
                 <i class="cloud-sync-icon bi bi-arrow-repeat"></i>
                 <span class="cloud-sync-btn-text">Sincronizar VPS</span>
             </button>
+            @if(Auth::check() && Auth::user()->isSuperAdmin())
+                <button type="button" class="btn-system-update btn btn-outline-warning btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;" title="Actualizar código desde GitHub">
+                    <i class="system-update-icon bi bi-cloud-arrow-down"></i>
+                    <span class="system-update-btn-text">Git Update</span>
+                </button>
+            @endif
         </div>
     </div>
 </div>
@@ -132,6 +138,59 @@
             });
             alert('⚠️ No hay conexión a internet o el VPS no respondió. Los datos están seguros en la base de datos local y se sincronizarán al reconectar.');
             checkSyncStatus();
+        });
+    });
+
+    // Actualización de Sistema desde GitHub (1 Clic)
+    document.addEventListener('click', function(e) {
+        const updateBtn = e.target.closest('.btn-system-update');
+        if (!updateBtn) return;
+
+        if (!confirm('¿Desea actualizar el sistema a la última versión disponible en GitHub (main)? Se aplicarán migraciones y optimizaciones automáticamente.')) {
+            return;
+        }
+
+        const allUpdateBtns = document.querySelectorAll('.btn-system-update');
+        allUpdateBtns.forEach(b => {
+            b.disabled = true;
+            b.querySelector('.system-update-icon')?.classList.add('spin-fast');
+            const txt = b.querySelector('.system-update-btn-text');
+            if (txt) txt.textContent = 'Actualizando...';
+        });
+
+        fetch('{{ route('system.update') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            allUpdateBtns.forEach(b => {
+                b.disabled = false;
+                b.querySelector('.system-update-icon')?.classList.remove('spin-fast');
+                const txt = b.querySelector('.system-update-btn-text');
+                if (txt) txt.textContent = 'Git Update';
+            });
+
+            if (data.success) {
+                const logs = (data.logs || []).join('\n');
+                alert(`✅ ${data.message}\n\nDetalles del proceso:\n${logs}`);
+                window.location.reload();
+            } else {
+                alert(`❌ ${data.message || 'Error al actualizar.'}`);
+            }
+        })
+        .catch(err => {
+            allUpdateBtns.forEach(b => {
+                b.disabled = false;
+                b.querySelector('.system-update-icon')?.classList.remove('spin-fast');
+                const txt = b.querySelector('.system-update-btn-text');
+                if (txt) txt.textContent = 'Git Update';
+            });
+            alert('❌ Error de comunicación o tiempo de espera al intentar actualizar el sistema.');
         });
     });
 
