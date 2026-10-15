@@ -232,6 +232,26 @@ class DatabaseBackupService
             ];
         }
 
+        // 1. Si Rclone está instalado y configurado en el servidor, subir directamente como usuario (5 TB)
+        try {
+            $rcloneCheck = Process::run('which rclone');
+            if ($rcloneCheck->successful() && !empty(trim($rcloneCheck->output()))) {
+                $dest = 'gdrive:Respaldos JSBolsas';
+                $rcloneRun = Process::timeout(180)->run(sprintf('rclone copy %s %s', escapeshellarg($filePath), escapeshellarg($dest)));
+                if ($rcloneRun->successful()) {
+                    Log::info("Backup {$filePath} subido exitosamente a Google Drive vía Rclone.");
+                    return [
+                        'success'  => true,
+                        'file_id'  => basename($filePath),
+                        'web_link' => "https://drive.google.com/drive/folders/{$targetFolderId}",
+                        'message'  => "Respaldo cargado exitosamente en Google Drive vía Rclone.",
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Aviso Rclone: " . $e->getMessage() . ", intentando API nativa...");
+        }
+
         try {
             $token = $this->getGoogleAccessToken();
             if (!$token) {
