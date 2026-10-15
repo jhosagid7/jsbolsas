@@ -500,6 +500,11 @@
                     </span>
                 @endif
             </p>
+            @if(request('return_to') === 'operator' || (Auth::check() && Auth::user()->isOperator()))
+                <div style="background: #e0f2fe; border: 1px solid #38bdf8; color: #0369a1; font-size: 12px; font-weight: 700; border-radius: 8px; padding: 6px 14px; margin-top: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                    <span>🔄</span> Retorno automático activo: al imprimir volverás automáticamente a tu estación de pesaje.
+                </div>
+            @endif
         </div>
         
         <!-- Fila 1: Selección de Modo de Empaque -->
@@ -533,18 +538,28 @@
 
         <!-- Botones de Acción -->
         <div class="btn-actions">
+            @php
+                $isFromOperator = request('return_to') === 'operator' || (Auth::check() && Auth::user()->isOperator());
+                $operatorRoute = route('operator.station', request('operator_id') ? ['operator_id' => request('operator_id')] : []);
+            @endphp
+
             <button type="button" class="btn-print" onclick="triggerPrint()">
                 🖨️ Mandar a Imprimir
             </button>
             <button type="button" class="btn-pdf" onclick="downloadPdf()">
                 📄 Descargar PDF
             </button>
-            <a href="{{ route('labels.index') }}" class="btn-back">
-                🏷️ Generador
+            <a href="{{ $operatorRoute }}" class="btn-print" style="background: #0284c7; text-decoration: none;">
+                ⬅️ Volver a Estación de Pesaje
             </a>
-            <a href="{{ route('bag-factory.label-audits') }}" class="btn-back" style="background:#b91c1c;">
-                🛡️ Auditoría
-            </a>
+            @if(Auth::check() && Auth::user()->role === 'admin' && request('return_to') !== 'operator')
+                <a href="{{ route('labels.index') }}" class="btn-back">
+                    🏷️ Generador
+                </a>
+                <a href="{{ route('bag-factory.label-audits') }}" class="btn-back" style="background:#b91c1c;">
+                    🛡️ Auditoría
+                </a>
+            @endif
         </div>
     </div>
 
@@ -654,8 +669,21 @@
             window.print();
         }
 
+        @if(request('auto_print'))
+            window.addEventListener('load', function() {
+                setTimeout(function() {
+                    triggerPrint();
+                }, 400);
+            });
+        @endif
+
         window.addEventListener('afterprint', function() {
             sendPrintAudit();
+            @if(request('return_to') === 'operator' || request('auto_print') || (Auth::check() && Auth::user()->isOperator()))
+                setTimeout(function() {
+                    window.location.href = "{{ $operatorRoute }}";
+                }, 400);
+            @endif
         });
 
         function changePaperSize(size) {

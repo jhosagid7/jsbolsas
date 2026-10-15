@@ -1550,6 +1550,10 @@ class BagFactoryWebController extends Controller
 
     public function ticket($id, Request $request)
     {
+        if ($request->has('return_to')) {
+            session()->reflash();
+        }
+
         $prod = BagProduction::with(['user', 'product', 'shift.user', 'reviewer'])->findOrFail($id);
         $product = $prod->product;
         $isVariable = (bool)($product?->is_variable_quantity);
@@ -2957,14 +2961,26 @@ class BagFactoryWebController extends Controller
             'metadata'                 => $metadataPayload,
         ]);
 
-        if ($isDirectPrint) {
-            return redirect()->route('ticket', ['id' => $production->id, 'scope' => 'bulto', 'auto_print' => 1]);
-        }
-
         $unitLabel = $product->is_variable_quantity ? "bobina(s)" : "millares";
         $wasteFeedback = $wasteWeight > 0 ? " (+ {$wasteWeight} Kg de purga/merma)" : "";
+        $successMsg = "Pesaje de {$qty} {$unitLabel} registrado correctamente ({$production->weight_grade_label}){$wasteFeedback}";
+
+        if ($isDirectPrint) {
+            session()->flash('success', $successMsg);
+            $ticketParams = [
+                'id'          => $production->id,
+                'scope'       => 'bulto',
+                'auto_print'  => 1,
+                'return_to'   => 'operator',
+            ];
+            if (!$user->isOperator() && $request->filled('operator_id')) {
+                $ticketParams['operator_id'] = $targetUser->id;
+            }
+            return redirect()->route('ticket', $ticketParams);
+        }
+
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUser->id] : [];
-        return redirect()->route('operator.station', $redirectParams)->with('success', "Pesaje de {$qty} {$unitLabel} registrado correctamente ({$production->weight_grade_label}){$wasteFeedback}");
+        return redirect()->route('operator.station', $redirectParams)->with('success', $successMsg);
     }
 
     public function operatorUpdateBatch(Request $request, $id)
