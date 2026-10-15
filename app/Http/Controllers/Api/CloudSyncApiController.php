@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use App\Models\CloudSyncLog;
 
 class CloudSyncApiController extends Controller
 {
@@ -74,6 +75,16 @@ class CloudSyncApiController extends Controller
         try {
             $processedCount = $this->syncService->importDeltas($payload);
 
+            CloudSyncLog::create([
+                'node_role'      => 'cloud',
+                'direction'      => 'push',
+                'status'         => 'success',
+                'records_pushed' => 0,
+                'records_pulled' => $processedCount,
+                'details'        => ['ip' => $request->ip()],
+                'synced_at'      => now(),
+            ]);
+
             return response()->json([
                 'success'         => true,
                 'processed_count' => $processedCount,
@@ -113,6 +124,16 @@ class CloudSyncApiController extends Controller
 
         try {
             $deltas = $this->syncService->exportDeltas($since);
+
+            CloudSyncLog::create([
+                'node_role'      => 'cloud',
+                'direction'      => 'pull',
+                'status'         => 'success',
+                'records_pushed' => count($deltas['products'] ?? []) + count($deltas['formulas'] ?? []),
+                'records_pulled' => 0,
+                'details'        => ['ip' => $request->ip()],
+                'synced_at'      => now(),
+            ]);
 
             return response()->json([
                 'success'     => true,

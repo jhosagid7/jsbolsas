@@ -3195,12 +3195,14 @@ class BagFactoryWebController extends Controller
     {
         $lastSync = $syncService->getLastSyncTime();
         $pending = $syncService->getPendingCount();
+        $isCloud = $syncService->getNodeRole() === 'cloud';
 
         return response()->json([
             'pending_count' => $pending,
-            'last_sync'     => $lastSync ? $lastSync->diffForHumans() : 'Nunca',
+            'last_sync'     => $lastSync ? $lastSync->diffForHumans() : ($isCloud ? 'Esperando conexión de planta' : 'Nunca'),
             'last_sync_at'  => $lastSync ? $lastSync->format('d/m/Y H:i') : null,
             'node_role'     => $syncService->getNodeRole(),
+            'is_cloud'      => $isCloud,
         ]);
     }
 

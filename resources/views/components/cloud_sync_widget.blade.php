@@ -18,10 +18,12 @@
         </div>
 
         <div class="d-flex align-items-center gap-1">
-            <button type="button" class="btn-cloud-sync-manual btn btn-outline-info btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;">
-                <i class="cloud-sync-icon bi bi-arrow-repeat"></i>
-                <span class="cloud-sync-btn-text">Sincronizar VPS</span>
-            </button>
+            @if(env('NODE_ROLE', 'local') === 'local')
+                <button type="button" class="btn-cloud-sync-manual btn btn-outline-info btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;">
+                    <i class="cloud-sync-icon bi bi-arrow-repeat"></i>
+                    <span class="cloud-sync-btn-text">Sincronizar VPS</span>
+                </button>
+            @endif
             @if(Auth::check() && Auth::user()->isSuperAdmin())
                 <button type="button" class="btn-system-update btn btn-outline-warning btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;" title="Actualizar código desde GitHub">
                     <i class="system-update-icon bi bi-cloud-arrow-down"></i>
@@ -50,6 +52,20 @@
         if (!data) return;
         const pending = parseInt(data.pending_count || 0);
         const lastSync = data.last_sync || 'Nunca';
+
+        if (data.is_cloud) {
+            document.querySelectorAll('.cloud-sync-badge').forEach(badge => {
+                badge.className = 'cloud-sync-badge badge bg-primary text-white font-monospace fw-bold';
+                badge.textContent = '☁️ Nube Central Activa';
+            });
+            document.querySelectorAll('.cloud-sync-dot').forEach(dot => {
+                dot.className = 'cloud-sync-dot spinner-grow spinner-grow-sm text-primary';
+            });
+            document.querySelectorAll('.cloud-sync-last-text').forEach(el => {
+                el.textContent = `Última sinc con planta: ${lastSync}`;
+            });
+            return;
+        }
 
         document.querySelectorAll('.cloud-sync-last-text').forEach(el => {
             el.textContent = `Última sinc: ${lastSync}`;

@@ -102,6 +102,12 @@ class CloudSyncService
      */
     public function getPendingCount(): int
     {
+        // En el nodo Cloud (VPS central), el servidor es el receptor de las plantas.
+        // No tiene registros pendientes por subir a nadie; está en la nube.
+        if ($this->nodeRole === 'cloud') {
+            return 0;
+        }
+
         $lastSync = $this->getLastSyncTime();
         $dateThreshold = $lastSync ?: now()->subDays(30);
 
