@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use App\Services\CloudSyncService;
+use App\Services\DatabaseBackupService;
 
 class BagFactoryWebController extends Controller
 {
@@ -3218,7 +3219,7 @@ class BagFactoryWebController extends Controller
     /**
      * Ejecuta la actualización segura del sistema desde GitHub vía web (Solo SuperAdmin)
      */
-    public function systemUpdate(Request $request, CloudSyncService $syncService)
+    public function systemUpdate(Request $request, CloudSyncService $syncService, DatabaseBackupService $backupService)
     {
         $user = Auth::user();
         if (!$user || !$user->isSuperAdmin()) {
@@ -3233,6 +3234,14 @@ class BagFactoryWebController extends Controller
         $outputLogs = [];
 
         try {
+            // 0. Respaldo obligatorio previo de la base de datos
+            $outputLogs[] = "0. Generando respaldo preventivo de la base de datos local...";
+            $backupResult = $backupService->dumpDatabase();
+            if (!$backupResult['success']) {
+                throw new \Exception('No se pudo asegurar la base de datos previa: ' . $backupResult['message']);
+            }
+            $outputLogs[] = "   ✓ Respaldo seguro guardado en: " . $backupResult['filename'] . " (" . $backupResult['size_human'] . ")";
+
             // Si es nodo local en planta, asegurar los registros pendientes primero
             if ($nodeRole === 'local') {
                 $outputLogs[] = "1. Subiendo pesajes y registros pendientes al VPS...";
@@ -3291,6 +3300,26 @@ class BagFactoryWebController extends Controller
                 'logs'    => $outputLogs,
             ], 500);
         }
+    }
+
+    /**
+     * Genera y descarga un respaldo completo de la base de datos para SuperAdmin
+     */
+    public function downloadDatabaseBackup(DatabaseBackupService $backupService)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isSuperAdmin()) {
+            abort(403, 'Acceso denegado: Solo el Super Administrador puede descargar respaldos de base de datos.');
+        }
+
+        $result = $backupService->dumpDatabase();
+        if (!$result['success'] || !file_exists($result['path'])) {
+            return back()->with('error', 'Error al generar el respaldo: ' . ($result['message'] ?? 'Error desconocido'));
+        }
+
+        return response()->download($result['path'], $result['filename'], [
+            'Content-Type' => 'application/gzip',
+        ]);
     }
 
     /**

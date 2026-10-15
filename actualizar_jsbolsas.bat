@@ -13,7 +13,18 @@ echo.
 pause
 
 echo.
-echo [1/5] Subiendo registros locales pendientes al VPS en la nube...
+echo [1/6] Generando respaldo preventivo de la base de datos local...
+php artisan db:backup
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo ⚠️ ADVERTENCIA: No se pudo generar el archivo de respaldo local.
+    echo ¿Desea continuar con la actualizacion sin respaldo previo?
+    choice /M "Presione S para continuar o N para cancelar"
+    if errorlevel 2 goto cancelado
+)
+
+echo.
+echo [2/6] Subiendo registros locales pendientes al VPS en la nube...
 php artisan cloud:sync --direction=push
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -24,7 +35,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [2/5] Descargando última versión de código desde GitHub (main)...
+echo [3/6] Descargando última versión de código desde GitHub (main)...
 git fetch origin main
 if %ERRORLEVEL% NEQ 0 (
     echo ❌ Error al contactar GitHub. Verifique su conexion a internet.
@@ -37,20 +48,20 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [3/5] Actualizando dependencias de sistema (Composer)...
+echo [4/6] Actualizando dependencias de sistema (Composer)...
 call composer install --no-dev --optimize-autoloader --no-interaction
 if %ERRORLEVEL% NEQ 0 (
     echo ⚠️ Advertencia: composer no pudo completarse al 100%, continuando con migraciones...
 )
 
 echo.
-echo [4/5] Aplicando migraciones de base de datos y limpiando caché...
+echo [5/6] Aplicando migraciones de base de datos y limpiando caché...
 php artisan migrate --force
 php artisan optimize:clear
 php artisan view:cache
 
 echo.
-echo [5/5] Descargando formulas, precios y catalogos nuevos desde el VPS...
+echo [6/6] Descargando formulas, precios y catalogos nuevos desde el VPS...
 php artisan cloud:sync --direction=pull
 
 echo.

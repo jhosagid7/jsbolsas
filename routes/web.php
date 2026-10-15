@@ -136,6 +136,7 @@ Route::middleware('auth')->group(function () {
 
     // Actualización del Sistema desde GitHub con 1 Clic (Solo SuperAdmin)
     Route::post('/sistema/actualizar', [BagFactoryWebController::class, 'systemUpdate'])->name('system.update');
+    Route::get('/sistema/respaldo/descargar', [BagFactoryWebController::class, 'downloadDatabaseBackup'])->name('sistema.respaldo.descargar');
 });
 
 require __DIR__ . '/auth.php';

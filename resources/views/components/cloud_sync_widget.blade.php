@@ -25,6 +25,10 @@
                 </button>
             @endif
             @if(Auth::check() && Auth::user()->isSuperAdmin())
+                <a href="{{ route('sistema.respaldo.descargar') }}" class="btn btn-outline-success btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1 text-decoration-none" style="font-size: 11px; border-radius: 8px;" title="Descargar copia de seguridad de la base de datos (.sql.gz)">
+                    <i class="bi bi-database-down"></i>
+                    <span>Respaldar DB</span>
+                </a>
                 <button type="button" class="btn-system-update btn btn-outline-warning btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;" title="Actualizar código desde GitHub">
                     <i class="system-update-icon bi bi-cloud-arrow-down"></i>
                     <span class="system-update-btn-text">Git Update</span>
