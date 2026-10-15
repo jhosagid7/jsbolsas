@@ -1,5 +1,5 @@
 <div class="cloud-sync-widget card border-0 p-2 shadow-sm mb-3" style="background: #111827; border-radius: 12px; border: 1px solid #374151 !important;">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-2">
         <div class="d-flex align-items-center gap-2">
             <span class="cloud-sync-dot spinner-grow spinner-grow-sm text-secondary" style="width: 9px; height: 9px;" role="status"></span>
             <div>
@@ -16,25 +16,27 @@
                 </small>
             </div>
         </div>
+    </div>
 
-        <div class="d-flex align-items-center gap-1">
-            @if(env('NODE_ROLE', 'local') === 'local')
-                <button type="button" class="btn-cloud-sync-manual btn btn-outline-info btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;">
-                    <i class="cloud-sync-icon bi bi-arrow-repeat"></i>
-                    <span class="cloud-sync-btn-text">Sincronizar VPS</span>
-                </button>
-            @endif
-            @if(Auth::check() && Auth::user()->isSuperAdmin())
-                <a href="{{ route('sistema.respaldo.descargar') }}" class="btn btn-outline-success btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1 text-decoration-none" style="font-size: 11px; border-radius: 8px;" title="Descargar copia de seguridad de la base de datos (.sql.gz)">
+    <div class="d-flex flex-column gap-1 pt-1 border-top border-secondary border-opacity-25">
+        @if(env('NODE_ROLE', 'local') === 'local')
+            <button type="button" class="btn-cloud-sync-manual btn btn-outline-info btn-sm fw-bold w-100 py-1 d-flex align-items-center justify-content-center gap-1" style="font-size: 11px; border-radius: 8px;">
+                <i class="cloud-sync-icon bi bi-arrow-repeat"></i>
+                <span class="cloud-sync-btn-text">Sincronizar VPS</span>
+            </button>
+        @endif
+        @if(Auth::check() && Auth::user()->isSuperAdmin())
+            <div class="d-flex gap-1 w-100">
+                <a href="{{ route('sistema.respaldo.descargar') }}" class="btn btn-outline-success btn-sm fw-bold flex-fill py-1 d-flex align-items-center justify-content-center gap-1 text-decoration-none" style="font-size: 10px; border-radius: 8px;" title="Descargar copia de seguridad de la base de datos (.sql.gz)">
                     <i class="bi bi-database-down"></i>
                     <span>Respaldar DB</span>
                 </a>
-                <button type="button" class="btn-system-update btn btn-outline-warning btn-sm fw-bold py-1 px-2 d-flex align-items-center gap-1" style="font-size: 11px; border-radius: 8px;" title="Actualizar código desde GitHub">
+                <button type="button" class="btn-system-update btn btn-outline-warning btn-sm fw-bold flex-fill py-1 d-flex align-items-center justify-content-center gap-1" style="font-size: 10px; border-radius: 8px;" title="Actualizar código desde GitHub">
                     <i class="system-update-icon bi bi-cloud-arrow-down"></i>
                     <span class="system-update-btn-text">Git Update</span>
                 </button>
-            @endif
-        </div>
+            </div>
+        @endif
     </div>
 </div>
 

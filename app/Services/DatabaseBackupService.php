@@ -12,16 +12,18 @@ class DatabaseBackupService
 {
     protected string $backupDir;
     protected ?string $googleDriveFolderId;
-    protected string $googleKeyPath;
+    protected ?string $googleDriveLocalPath;
 
     public function __construct()
     {
         $this->backupDir = str_replace('\\', '/', storage_path('app/backups'));
         if (!is_dir($this->backupDir)) {
-            mkdir($this->backupDir, 0755, true);
+            @mkdir($this->backupDir, 0775, true);
         }
+        @chmod($this->backupDir, 0775);
 
         $this->googleDriveFolderId = env('GOOGLE_DRIVE_FOLDER_ID');
+        $this->googleDriveLocalPath = env('GOOGLE_DRIVE_LOCAL_PATH');
         $keyFile = env('GOOGLE_DRIVE_KEY_FILE', 'storage/app/google-drive-key.json');
         $resolvedKey = file_exists(base_path($keyFile)) ? base_path($keyFile) : storage_path('app/google-drive-key.json');
         $this->googleKeyPath = str_replace('\\', '/', $resolvedKey);
@@ -116,6 +118,12 @@ class DatabaseBackupService
         $gzContent = gzencode($sqlContent, 9);
         file_put_contents($gzPath, $gzContent);
         @unlink($sqlPath); // Eliminar el .sql plano dejando solo el comprimido
+
+        // Sincronizar automáticamente con carpeta de Google Drive para Escritorio si existe
+        if ($this->googleDriveLocalPath && is_dir($this->googleDriveLocalPath)) {
+            $destPath = rtrim(str_replace('\\', '/', $this->googleDriveLocalPath), '/') . '/' . basename($gzPath);
+            @copy($gzPath, $destPath);
+        }
 
         return [
             'success'    => true,
