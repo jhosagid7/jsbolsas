@@ -2459,10 +2459,19 @@ class BagFactoryWebController extends Controller
         $user = Auth::user();
 
         // Si es admin/supervisor y desea ver la estación de otro operario:
-        $targetUserId = ($user->isOperator() || !$request->filled('operator_id'))
-            ? $user->id
-            : $request->operator_id;
-        $targetUser = User::find($targetUserId) ?: $user;
+        if ($user->isOperator()) {
+            $targetUser = $user;
+        } else {
+            if ($request->filled('operator_id')) {
+                $targetUserId = (int)$request->operator_id;
+                session(['last_supervised_operator_id' => $targetUserId]);
+            } elseif (session()->has('last_supervised_operator_id')) {
+                $targetUserId = (int)session('last_supervised_operator_id');
+            } else {
+                $targetUserId = $user->id;
+            }
+            $targetUser = User::find($targetUserId) ?: $user;
+        }
 
         // Buscar turno activo del operario objetivo
         $activeShift = BagShift::where('user_id', $targetUser->id)

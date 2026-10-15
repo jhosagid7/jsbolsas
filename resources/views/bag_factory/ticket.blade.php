@@ -540,7 +540,8 @@
         <div class="btn-actions">
             @php
                 $isFromOperator = request('return_to') === 'operator' || (Auth::check() && Auth::user()->isOperator());
-                $operatorRoute = route('operator.station', request('operator_id') ? ['operator_id' => request('operator_id')] : []);
+                $returnOpId = request('operator_id') ?: ($prod->user_id ?? null);
+                $operatorRoute = route('operator.station', ($returnOpId && (!Auth::check() || !Auth::user()->isOperator())) ? ['operator_id' => $returnOpId] : []);
             @endphp
 
             <button type="button" class="btn-print" onclick="triggerPrint()">

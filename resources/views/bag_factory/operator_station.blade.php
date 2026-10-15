@@ -25,6 +25,9 @@
                 <form method="GET" action="{{ route('operator.station') }}" class="d-flex align-items-center gap-1">
                     <label class="text-white-50 small mb-0 d-none d-sm-inline">Ver Operador:</label>
                     <select name="operator_id" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="this.form.submit()">
+                        <option value="{{ $user->id }}" {{ $targetUser->id == $user->id ? 'selected' : '' }}>
+                            👑 Mi Estación ({{ $user->name }})
+                        </option>
                         @foreach($operatorsList as $op)
                             <option value="{{ $op->id }}" {{ $targetUser->id == $op->id ? 'selected' : '' }}>
                                 👤 {{ $op->name }}
