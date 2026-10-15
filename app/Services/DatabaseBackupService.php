@@ -13,6 +13,10 @@ class DatabaseBackupService
     protected string $backupDir;
     protected ?string $googleDriveFolderId;
     protected ?string $googleDriveLocalPath;
+    protected string $googleKeyPath;
+    protected string $nodeRole;
+    protected string $cloudUrl;
+    protected string $syncToken;
 
     public function __construct()
     {
@@ -21,6 +25,10 @@ class DatabaseBackupService
             @mkdir($this->backupDir, 0775, true);
         }
         @chmod($this->backupDir, 0775);
+
+        $this->nodeRole = env('NODE_ROLE', 'local');
+        $this->cloudUrl = rtrim(config('services.cloud_sync.url', env('CLOUD_SYNC_URL', 'https://bolsas.plasticosmyf.com')), '/');
+        $this->syncToken = config('services.cloud_sync.token', env('CLOUD_SYNC_TOKEN', 'jsbolsas_secure_sync_token_2026'));
 
         $this->googleDriveFolderId = env('GOOGLE_DRIVE_FOLDER_ID');
         $this->googleDriveLocalPath = env('GOOGLE_DRIVE_LOCAL_PATH');
@@ -231,22 +239,28 @@ class DatabaseBackupService
 
     /**
      * Sube un archivo de respaldo directamente a Google Drive en la carpeta designada
+     * o lo delega al VPS si este nodo es un cliente local
      */
     public function uploadToGoogleDrive(string $filePath, ?string $folderId = null): array
     {
+        if (!file_exists($filePath)) {
+            return [
+                'success' => false,
+                'message' => "El archivo a subir no existe: {$filePath}",
+            ];
+        }
+
+        // Si este nodo es una máquina cliente/local, transmite de forma segura al VPS central (Zero Credentials en cliente)
+        if ($this->nodeRole === 'local') {
+            return $this->sendBackupToCloud($filePath);
+        }
+
         $targetFolderId = $folderId ?: $this->googleDriveFolderId;
 
         if (!$targetFolderId) {
             return [
                 'success' => false,
                 'message' => 'No se ha configurado la variable GOOGLE_DRIVE_FOLDER_ID en el archivo .env',
-            ];
-        }
-
-        if (!file_exists($filePath)) {
-            return [
-                'success' => false,
-                'message' => "El archivo a subir no existe: {$filePath}",
             ];
         }
 
@@ -377,6 +391,60 @@ class DatabaseBackupService
     }
 
     /**
+     * Transmite el archivo de respaldo al servidor VPS en la nube para que éste lo suba a Google Drive (Zero Credentials en cliente)
+     */
+    public function sendBackupToCloud(string $filePath): array
+    {
+        if (!file_exists($filePath)) {
+            return [
+                'success' => false,
+                'message' => "El archivo a enviar no existe: {$filePath}",
+            ];
+        }
+
+        try {
+            $fileName = basename($filePath);
+            $response = Http::withHeaders([
+                'X-Sync-Token' => $this->syncToken,
+            ])
+            ->timeout(300)
+            ->attach('backup_file', fopen($filePath, 'r'), $fileName)
+            ->post("{$this->cloudUrl}/api/cloud-sync/upload-backup");
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $driveSub = $data['drive_result'] ?? [];
+
+                Log::info("Backup {$fileName} transmitido al VPS exitosamente: " . json_encode($data));
+
+                return [
+                    'success'      => true,
+                    'file_id'      => $driveSub['file_id'] ?? $fileName,
+                    'web_link'     => $driveSub['web_link'] ?? "https://drive.google.com/drive/folders/{$this->googleDriveFolderId}",
+                    'message'      => $data['message'] ?? 'Respaldo transmitido al servidor VPS y cargado en Google Drive.',
+                    'file'         => $fileName,
+                    'drive_result' => $driveSub,
+                ];
+            }
+
+            $errMsg = $response->json('message') ?? $response->body();
+            Log::error("Error transmitiendo backup al VPS: HTTP {$response->status()} - {$errMsg}");
+
+            return [
+                'success' => false,
+                'message' => "El servidor VPS rechazó la recepción del respaldo: {$errMsg}",
+            ];
+        } catch (\Throwable $e) {
+            Log::error("Excepción al transmitir backup al VPS: " . $e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => "Error de conexión al enviar respaldo al servidor VPS: " . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Ejecuta ciclo completo: Dump + Rotación + Subida opcional a Google Drive
      */
     public function runFullBackup(bool $uploadToDrive = true, int $keepDays = 30): array
@@ -389,7 +457,7 @@ class DatabaseBackupService
         $rotated = $this->rotateBackups($keepDays);
 
         $driveResult = null;
-        if ($uploadToDrive && $this->googleDriveFolderId && file_exists($this->googleKeyPath)) {
+        if ($uploadToDrive) {
             $driveResult = $this->uploadToGoogleDrive($dumpResult['path']);
         }
 

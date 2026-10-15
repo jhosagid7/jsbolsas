@@ -65,4 +65,5 @@ Route::prefix('cloud-sync')->group(function () {
     Route::post('/handshake', [CloudSyncApiController::class, 'handshake']);
     Route::post('/push', [CloudSyncApiController::class, 'push']);
     Route::post('/pull', [CloudSyncApiController::class, 'pull']);
+    Route::post('/upload-backup', [CloudSyncApiController::class, 'uploadBackup']);
 });

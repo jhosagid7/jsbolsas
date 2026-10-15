@@ -148,4 +148,52 @@ class CloudSyncApiController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Endpoint M2M: Recibe archivo de respaldo de un cliente/planta y lo sube a Google Drive desde el VPS
+     */
+    public function uploadBackup(Request $request, \App\Services\DatabaseBackupService $backupService): JsonResponse
+    {
+        if ($errorResponse = $this->validateToken($request)) {
+            return $errorResponse;
+        }
+
+        if (!$request->hasFile('backup_file')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se adjuntó ningún archivo de respaldo en el campo backup_file.',
+            ], 422);
+        }
+
+        try {
+            $file = $request->file('backup_file');
+            $fileName = $file->getClientOriginalName() ?: ('backup_client_' . now()->format('Y-m-d_His') . '.sql.gz');
+            $destDir = storage_path('app/backups');
+            if (!is_dir($destDir)) {
+                @mkdir($destDir, 0775, true);
+            }
+
+            $targetPath = $destDir . DIRECTORY_SEPARATOR . $fileName;
+            $file->move($destDir, $fileName);
+            @chmod($targetPath, 0664);
+
+            // El VPS sube el archivo a Google Drive (5 TB) usando su propia sesión de Rclone
+            $driveResult = $backupService->uploadToGoogleDrive($targetPath);
+
+            Log::info("Respaldo {$fileName} recibido de cliente y procesado en Drive: " . json_encode($driveResult));
+
+            return response()->json([
+                'success'      => true,
+                'message'      => 'Respaldo recibido exitosamente en VPS' . ($driveResult['success'] ? ' y cargado en Google Drive.' : '.'),
+                'file'         => $fileName,
+                'drive_result' => $driveResult,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error en CloudSyncApiController@uploadBackup: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar respaldo en VPS: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

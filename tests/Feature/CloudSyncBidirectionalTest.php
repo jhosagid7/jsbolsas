@@ -21,6 +21,8 @@ use App\Services\CloudSyncService;
 
 class CloudSyncBidirectionalTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected string $syncToken = 'jsbolsas_secure_sync_token_2026';
 
     protected function setUp(): void
