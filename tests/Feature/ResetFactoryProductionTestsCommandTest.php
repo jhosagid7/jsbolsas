@@ -14,8 +14,6 @@ use App\Models\RawMaterialStock;
 
 class ResetFactoryProductionTestsCommandTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_reset_factory_production_tests_clears_records_and_resets_raw_material_stocks(): void
     {
         $user = User::factory()->create(['name' => 'Operario Test']);
@@ -73,13 +71,23 @@ class ResetFactoryProductionTestsCommandTest extends TestCase
             'is_active'  => true,
         ]);
 
+        \App\Models\CloudSyncLog::create([
+            'node_role'      => 'local',
+            'direction'      => 'push',
+            'status'         => 'success',
+            'records_pushed' => 5,
+            'records_pulled' => 0,
+            'synced_at'      => now(),
+        ]);
+
         // Ejecutar comando Artisan
         $this->artisan('factory:reset-tests', ['--force' => true])
             ->assertExitCode(0);
 
-        // Validar que se vaciaron producciones y turnos
+        // Validar que se vaciaron producciones, turnos y logs de sincronización
         $this->assertDatabaseCount('bag_productions', 0);
         $this->assertDatabaseCount('bag_shifts', 0);
+        $this->assertDatabaseCount('cloud_sync_logs', 0);
 
         // Validar que los usuarios, productos y materias primas siguen intactos
         $this->assertDatabaseHas('users', ['id' => $user->id]);

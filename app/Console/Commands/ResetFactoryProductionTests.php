@@ -74,6 +74,12 @@ class ResetFactoryProductionTests extends Command
         DB::table('raw_material_audits')->truncate();
         $this->line("✓ raw_material_audits: <comment>{$audits}</comment> arqueos vaciados.");
 
+        if (\Illuminate\Support\Facades\Schema::hasTable('cloud_sync_logs')) {
+            $syncLogs = DB::table('cloud_sync_logs')->count();
+            DB::table('cloud_sync_logs')->truncate();
+            $this->line("✓ cloud_sync_logs: <comment>{$syncLogs}</comment> registros de sincronización vaciados.");
+        }
+
         // 6. Restablecer stocks base de materias primas
         // Planta Tolva: 25.0 Kg (exactamente 1 saco) por cada materia prima activa
         // Almacén Principal: 250.0 Kg (exactamente 10 sacos) por cada materia prima activa
