@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Models\User;
@@ -126,7 +127,7 @@ class CloudSyncService
      */
     public function exportDeltas(?Carbon $since = null): array
     {
-        $queryDate = $since ?: now()->subDays(30);
+        $queryDate = $since ?: Carbon::createFromTimestamp(0);
 
         // 1. Turnos operativos
         $shifts = BagShift::with(['user', 'machine'])
@@ -279,7 +280,26 @@ class CloudSyncService
                 ];
             })->toArray();
 
+        // 9. Usuarios y Operarios de Fábrica
+        $users = User::where('updated_at', '>=', $queryDate)
+            ->get()
+            ->map(function ($u) {
+                return [
+                    'name'                 => $u->name,
+                    'email'                => $u->email,
+                    'password'             => $u->getRawOriginal('password'),
+                    'phone'                => $u->phone,
+                    'profile'              => $u->profile ?: $u->role ?: 'operario',
+                    'role'                 => $u->role ?: $u->profile ?: 'operario',
+                    'weekly_salary'        => (float)$u->weekly_salary,
+                    'work_days_per_week'   => (int)$u->work_days_per_week,
+                    'pay_partial_packages' => (bool)$u->pay_partial_packages,
+                    'updated_at'           => $u->updated_at ? $u->updated_at->toISOString() : null,
+                ];
+            })->toArray();
+
         return [
+            'users'         => $users,
             'machines'      => $machines,
             'shifts'        => $shifts,
             'productions'   => $productions,
@@ -300,7 +320,49 @@ class CloudSyncService
 
         DB::beginTransaction();
         try {
-            // 0. Máquinas y Líneas de Producción
+            // 0. Usuarios y Operarios de Fábrica
+            if (!empty($payload['users'])) {
+                foreach ($payload['users'] as $uData) {
+                    if (empty($uData['email'])) continue;
+                    $profileVal = $uData['profile'] ?? $uData['role'] ?? 'operario';
+                    $existingUser = User::where('email', $uData['email'])->first();
+                    if ($existingUser) {
+                        $updateData = [
+                            'name'                 => $uData['name'] ?? $existingUser->name,
+                            'phone'                => $uData['phone'] ?? $existingUser->phone,
+                            'profile'              => $profileVal,
+                            'weekly_salary'        => (float)($uData['weekly_salary'] ?? $existingUser->weekly_salary),
+                            'work_days_per_week'   => (int)($uData['work_days_per_week'] ?? $existingUser->work_days_per_week),
+                            'pay_partial_packages' => (bool)($uData['pay_partial_packages'] ?? $existingUser->pay_partial_packages),
+                        ];
+                        if (Schema::hasColumn('users', 'role')) {
+                            $updateData['role'] = $profileVal;
+                        }
+                        $existingUser->update($updateData);
+                    } else {
+                        $insertData = [
+                            'name'                 => $uData['name'] ?? 'Usuario Fábrica',
+                            'email'                => $uData['email'],
+                            'password'             => $uData['password'] ?? bcrypt('password123'),
+                            'phone'                => $uData['phone'] ?? null,
+                            'profile'              => $profileVal,
+                            'status'               => 'Active',
+                            'weekly_salary'        => (float)($uData['weekly_salary'] ?? 90.00),
+                            'work_days_per_week'   => (int)($uData['work_days_per_week'] ?? 6),
+                            'pay_partial_packages' => (bool)($uData['pay_partial_packages'] ?? false),
+                            'created_at'           => now(),
+                            'updated_at'           => now(),
+                        ];
+                        if (Schema::hasColumn('users', 'role')) {
+                            $insertData['role'] = $profileVal;
+                        }
+                        DB::table('users')->insert($insertData);
+                    }
+                    $processed++;
+                }
+            }
+
+            // 0.1 Máquinas y Líneas de Producción
             if (!empty($payload['machines'])) {
                 foreach ($payload['machines'] as $mData) {
                     if (empty($mData['code'])) continue;
@@ -524,7 +586,8 @@ class CloudSyncService
             + count($payload['stocks'] ?? [])
             + count($payload['transfers'] ?? [])
             + count($payload['formulas'] ?? [])
-            + count($payload['products'] ?? []);
+            + count($payload['products'] ?? [])
+            + count($payload['users'] ?? []);
 
         if ($totalItems === 0) {
             return ['pushed' => 0, 'message' => 'No hay registros locales pendientes por subir.'];

@@ -296,4 +296,46 @@ class CloudSyncBidirectionalTest extends TestCase
         $this->assertDatabaseHas('bag_shifts', ['sync_id' => 'SHIFT-TEST-001']);
         $this->assertDatabaseHas('bag_productions', ['sync_id' => 'PROD-TEST-001']);
     }
+
+    public function test_users_are_exported_and_imported_in_deltas()
+    {
+        $service = app(CloudSyncService::class);
+
+        // Crear un usuario de prueba
+        $user = User::create([
+            'name'                 => 'Carlos Supervisor Test',
+            'email'                => 'carlos_supervisor@test.com',
+            'password'             => bcrypt('secretpassword123'),
+            'role'                 => 'supervisor',
+            'phone'                => '04141234567',
+            'weekly_salary'        => 120.00,
+            'work_days_per_week'   => 6,
+            'pay_partial_packages' => true,
+        ]);
+
+        // Exportar deltas
+        $payload = $service->exportDeltas();
+        $this->assertNotEmpty($payload['users']);
+        $exportedUser = collect($payload['users'])->firstWhere('email', 'carlos_supervisor@test.com');
+        $this->assertNotNull($exportedUser);
+        $this->assertEquals('Carlos Supervisor Test', $exportedUser['name']);
+        $this->assertEquals('supervisor', $exportedUser['role']);
+
+        // Simular importación
+        User::query()->delete();
+        $this->assertEquals(0, User::count());
+
+        $importedCount = $service->importDeltas($payload);
+        $this->assertGreaterThanOrEqual(1, $importedCount);
+        $this->assertDatabaseHas('users', [
+            'email'   => 'carlos_supervisor@test.com',
+            'profile' => 'supervisor',
+            'name'    => 'Carlos Supervisor Test',
+        ]);
+
+        $importedUser = User::where('email', 'carlos_supervisor@test.com')->first();
+        $this->assertEquals('supervisor', $importedUser->role);
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('secretpassword123', $importedUser->password));
+    }
 }
+
