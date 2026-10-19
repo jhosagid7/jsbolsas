@@ -37,13 +37,16 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear accesos directos en el Escritorio"; GroupDescription: "Accesos Directos:"
+Name: "laragon"; Description: "Instalar entorno de servidor web Laragon WAMP oficial"; GroupDescription: "Componentes Adicionales de Servidor y Red:"
+Name: "jsdesk"; Description: "Instalar cliente de soporte remoto JSDesk"; GroupDescription: "Componentes Adicionales de Servidor y Red:"
+Name: "jsvpn"; Description: "Instalar cliente de red segura JSVPN Enterprise"; GroupDescription: "Componentes Adicionales de Servidor y Red:"
 Name: "autostart"; Description: "Iniciar servidor Laragon automáticamente al encender la PC"; GroupDescription: "Opciones de Sistema:"
 
 [Files]
 ; 1. Herramientas oficiales que se extraen temporalmente y se eliminan tras la instalación
-Source: "tools\laragon-wamp.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NotLaragonInstalled
-Source: "tools\jsdesk_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NotJSDeskInstalled
-Source: "tools\JSVPN-Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NotJSVPNInstalled
+Source: "tools\laragon-wamp.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: laragon; Check: NotLaragonInstalled
+Source: "tools\jsdesk_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: jsdesk; Check: NotJSDeskInstalled
+Source: "tools\JSVPN-Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: jsvpn; Check: NotJSVPNInstalled
 
 ; 2. Archivos del Sistema JSBolsas Pro
 Source: "..\\*"; DestDir: "{app}\www\jsbolsas"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: ".git\*,.github\*,storage\logs\*,node_modules\*,output\*,installer\tools\*,installer\output\*"
@@ -74,17 +77,17 @@ Name: "{autodesktop}\🎧 Soporte Remoto (JSDesk)"; Filename: "{code:GetJSDeskEx
 Name: "{userstartup}\Laragon Servidor Industrial"; Filename: "{app}\laragon.exe"; Parameters: "--minimized"; Tasks: autostart
 
 [Run]
-; 1. Instalar Laragon WAMP si no está instalado previamente en la PC
-Filename: "{tmp}\laragon-wamp.exe"; Parameters: "/SILENT /NORESTART /SUPPRESSMSGBOXES"; Flags: runhidden waituntilterminated; Check: NotLaragonInstalled; StatusMsg: "Instalando entorno oficial de servidor Laragon WAMP..."
+; 1. Instalar Laragon WAMP si la tarea está marcada y no está instalado previamente
+Filename: "{tmp}\laragon-wamp.exe"; Parameters: "/SILENT /NORESTART /SUPPRESSMSGBOXES"; Flags: runhidden waituntilterminated; Tasks: laragon; Check: NotLaragonInstalled; StatusMsg: "Instalando entorno oficial de servidor Laragon WAMP..."
 
-; 2. Instalar JSDesk SOLO si no está instalado previamente
-Filename: "{tmp}\jsdesk_setup.exe"; Parameters: "--silent-install"; Flags: runhidden waituntilterminated; Check: NotJSDeskInstalled; StatusMsg: "Instalando servicio de soporte remoto JSDesk..."
+; 2. Instalar JSDesk SOLO si la tarea está marcada y no está instalado previamente
+Filename: "{tmp}\jsdesk_setup.exe"; Parameters: "--silent-install"; Flags: runhidden waituntilterminated; Tasks: jsdesk; Check: NotJSDeskInstalled; StatusMsg: "Instalando servicio de soporte remoto JSDesk..."
 
-; 3. Configurar la clave maestra de soporte desatendido en JSDesk (se ejecuta SIEMPRE: tanto si se instaló como si ya existía)
+; 3. Configurar la clave maestra de soporte desatendido en JSDesk (se ejecuta si JSDesk está presente en el equipo)
 Filename: "{code:GetJSDeskExePath}"; Parameters: "--password {#JSDeskPassword}"; Flags: runhidden waituntilterminated; Check: IsJSDeskInstalled; StatusMsg: "Configurando clave maestra de soporte en JSDesk..."
 
-; 4. Instalar JSVPN (Red Privada Segura) solo si no está instalado
-Filename: "{tmp}\JSVPN-Setup.exe"; Parameters: "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES"; Flags: runhidden waituntilterminated; Check: NotJSVPNInstalled; StatusMsg: "Instalando cliente seguro JSVPN Enterprise..."
+; 4. Instalar JSVPN (Red Privada Segura) solo si la tarea está marcada y no está instalado
+Filename: "{tmp}\JSVPN-Setup.exe"; Parameters: "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES"; Flags: runhidden waituntilterminated; Tasks: jsvpn; Check: NotJSVPNInstalled; StatusMsg: "Instalando cliente seguro JSVPN Enterprise..."
 
 ; 5. Inicializar Base de Datos, Migraciones y Configuración de Fábrica
 Filename: "{app}\www\jsbolsas\installer\install_helper.bat"; Flags: runhidden waituntilterminated; StatusMsg: "Inicializando base de datos y configuraciones limpias de fábrica..."
