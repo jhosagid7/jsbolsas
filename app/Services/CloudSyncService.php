@@ -346,13 +346,15 @@ class CloudSyncService
                             'password'             => $uData['password'] ?? bcrypt('password123'),
                             'phone'                => $uData['phone'] ?? null,
                             'profile'              => $profileVal,
-                            'status'               => 'Active',
                             'weekly_salary'        => (float)($uData['weekly_salary'] ?? 90.00),
                             'work_days_per_week'   => (int)($uData['work_days_per_week'] ?? 6),
                             'pay_partial_packages' => (bool)($uData['pay_partial_packages'] ?? false),
                             'created_at'           => now(),
                             'updated_at'           => now(),
                         ];
+                        if (Schema::hasColumn('users', 'status')) {
+                            $insertData['status'] = 'Active';
+                        }
                         if (Schema::hasColumn('users', 'role')) {
                             $insertData['role'] = $profileVal;
                         }
