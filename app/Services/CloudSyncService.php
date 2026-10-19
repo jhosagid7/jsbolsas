@@ -266,7 +266,21 @@ class CloudSyncService
                 ];
             })->toArray();
 
+        // 8. Máquinas y Líneas de Producción
+        $machines = BagMachine::where('updated_at', '>=', $queryDate)
+            ->get()
+            ->map(function ($m) {
+                return [
+                    'name'       => $m->name,
+                    'code'       => $m->code,
+                    'type'       => $m->type,
+                    'is_active'  => (bool)$m->is_active,
+                    'updated_at' => $m->updated_at ? $m->updated_at->toISOString() : null,
+                ];
+            })->toArray();
+
         return [
+            'machines'      => $machines,
             'shifts'        => $shifts,
             'productions'   => $productions,
             'raw_materials' => $rawMaterials,
@@ -286,6 +300,22 @@ class CloudSyncService
 
         DB::beginTransaction();
         try {
+            // 0. Máquinas y Líneas de Producción
+            if (!empty($payload['machines'])) {
+                foreach ($payload['machines'] as $mData) {
+                    if (empty($mData['code'])) continue;
+                    BagMachine::updateOrCreate(
+                        ['code' => $mData['code']],
+                        [
+                            'name'      => $mData['name'] ?? $mData['code'],
+                            'type'      => in_array($mData['type'] ?? '', ['extrusora', 'selladora']) ? $mData['type'] : 'selladora',
+                            'is_active' => (bool)($mData['is_active'] ?? true),
+                        ]
+                    );
+                    $processed++;
+                }
+            }
+
             // 1. Materias Primas
             if (!empty($payload['raw_materials'])) {
                 foreach ($payload['raw_materials'] as $matData) {
@@ -387,14 +417,12 @@ class CloudSyncService
             if (!empty($payload['shifts'])) {
                 foreach ($payload['shifts'] as $sData) {
                     if (empty($sData['sync_id'])) continue;
-                    $u = !empty($sData['user_email']) ? User::where('email', $sData['user_email'])->first() : null;
-                    $m = !empty($sData['machine_code']) ? BagMachine::where('code', $sData['machine_code'])->first() : null;
 
                     BagShift::updateOrCreate(
                         ['sync_id' => $sData['sync_id']],
                         [
-                            'user_id'        => $u?->id ?: User::first()->id,
-                            'machine_id'     => $m?->id ?: BagMachine::first()->id,
+                            'user_id'        => $this->resolveUserId($sData['user_email'] ?? null),
+                            'machine_id'     => $this->resolveMachineId($sData['machine_code'] ?? null),
                             'shift_type'     => in_array($sData['shift_type'] ?? '', ['diurno', 'nocturno']) ? $sData['shift_type'] : 'diurno',
                             'start_time'     => $sData['start_time'] ? Carbon::parse($sData['start_time']) : now(),
                             'end_time'       => $sData['end_time'] ? Carbon::parse($sData['end_time']) : null,
@@ -414,18 +442,15 @@ class CloudSyncService
                     if (empty($pData['sync_id'])) continue;
 
                     $pShift = !empty($pData['shift_sync_id']) ? BagShift::where('sync_id', $pData['shift_sync_id'])->first() : null;
-                    $pProd = !empty($pData['product_sku']) ? BagProduct::where('sku', $pData['product_sku'])->first() : null;
-                    $pMach = !empty($pData['machine_code']) ? BagMachine::where('code', $pData['machine_code'])->first() : null;
-                    $pUser = !empty($pData['user_email']) ? User::where('email', $pData['user_email'])->first() : null;
                     $pForm = !empty($pData['formula_code']) ? ProductionFormula::where('code', $pData['formula_code'])->first() : null;
 
                     BagProduction::updateOrCreate(
                         ['sync_id' => $pData['sync_id']],
                         [
                             'bag_shift_id'             => $pShift?->id ?: (BagShift::latest('id')->value('id') ?: 1),
-                            'product_id'               => $pProd?->id ?: BagProduct::first()->id,
-                            'machine_id'               => $pMach?->id ?: BagMachine::first()->id,
-                            'user_id'                  => $pUser?->id ?: User::first()->id,
+                            'product_id'               => $this->resolveProductId($pData['product_sku'] ?? null),
+                            'machine_id'               => $this->resolveMachineId($pData['machine_code'] ?? null),
+                            'user_id'                  => $this->resolveUserId($pData['user_email'] ?? null),
                             'production_formula_id'    => $pForm?->id,
                             'quantity'                 => (float)($pData['quantity'] ?? 1),
                             'weight'                   => (float)($pData['weight'] ?? 0),
@@ -466,7 +491,7 @@ class CloudSyncService
                                 'to_warehouse'      => $trData['to_warehouse'] ?? 'planta',
                                 'sacos_transferred' => (float)($trData['sacos_transferred'] ?? 0),
                                 'weight_kg'         => (float)($trData['weight_kg'] ?? 0),
-                                'transferred_by'    => $trUser?->id,
+                                'transferred_by'    => !empty($trData['transferred_by_email']) ? $this->resolveUserId($trData['transferred_by_email']) : null,
                                 'transferred_at'    => $trData['transferred_at'] ? Carbon::parse($trData['transferred_at']) : now(),
                                 'notes'             => $trData['notes'] ?? null,
                             ]
@@ -492,7 +517,8 @@ class CloudSyncService
     public function pushDeltas(?Carbon $since = null): array
     {
         $payload = $this->exportDeltas($since ?: $this->getLastSyncTime());
-        $totalItems = count($payload['shifts'] ?? [])
+        $totalItems = count($payload['machines'] ?? [])
+            + count($payload['shifts'] ?? [])
             + count($payload['productions'] ?? [])
             + count($payload['raw_materials'] ?? [])
             + count($payload['stocks'] ?? [])
@@ -614,5 +640,93 @@ class CloudSyncService
                 'message' => 'Error durante la sincronización: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Resuelve de forma segura el ID de usuario o genera uno por defecto para evitar fallas por FK
+     */
+    protected function resolveUserId(?string $email): int
+    {
+        if (!empty($email)) {
+            $user = User::where('email', $email)->first();
+            if ($user) {
+                return $user->id;
+            }
+        }
+
+        $fallback = User::first();
+        if (!$fallback) {
+            $fallback = User::create([
+                'name'     => 'Operario Fábrica',
+                'email'    => $email ?: 'operario@plasticosmyf.com',
+                'password' => bcrypt('password123'),
+            ]);
+        }
+
+        return $fallback->id;
+    }
+
+    /**
+     * Resuelve de forma segura el ID de máquina o crea una máquina estándar para evitar null pointer
+     */
+    protected function resolveMachineId(?string $code): int
+    {
+        if (!empty($code)) {
+            $machine = BagMachine::where('code', $code)->first();
+            if (!$machine) {
+                $machine = BagMachine::create([
+                    'name'      => 'Máquina ' . $code,
+                    'code'      => $code,
+                    'type'      => 'selladora',
+                    'is_active' => true,
+                ]);
+            }
+            return $machine->id;
+        }
+
+        $fallback = BagMachine::first();
+        if (!$fallback) {
+            $fallback = BagMachine::create([
+                'name'      => 'Máquina M01',
+                'code'      => 'M01',
+                'type'      => 'selladora',
+                'is_active' => true,
+            ]);
+        }
+
+        return $fallback->id;
+    }
+
+    /**
+     * Resuelve de forma segura el ID de producto o crea un SKU genérico
+     */
+    protected function resolveProductId(?string $sku): int
+    {
+        if (!empty($sku)) {
+            $product = BagProduct::where('sku', $sku)->first();
+            if ($product) {
+                return $product->id;
+            }
+        }
+
+        $fallback = BagProduct::first();
+        if (!$fallback) {
+            $fallback = BagProduct::create([
+                'sku'                    => $sku ?: 'PROD-GEN',
+                'name'                   => 'Bolsa Estándar',
+                'category'               => 'General',
+                'material_type'          => 'Baja Densidad',
+                'width_inch'             => 10,
+                'length_inch'            => 15,
+                'gauge_caliber'          => 1,
+                'unit_weight_kg'         => 0.01,
+                'millar_per_bulto'       => 1,
+                'price'                  => 1,
+                'cost'                   => 0.5,
+                'is_active'              => true,
+            ]);
+        }
+
+        return $fallback->id;
     }
 }

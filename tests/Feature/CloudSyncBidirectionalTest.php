@@ -242,4 +242,58 @@ class CloudSyncBidirectionalTest extends TestCase
         $manualRes->assertStatus(200)
             ->assertJsonPath('success', true);
     }
+
+    public function test_import_deltas_handles_missing_foreign_keys_and_empty_local_db_without_error()
+    {
+        $service = app(CloudSyncService::class);
+
+        // Database is completely empty of machines, users, products
+        $this->assertEquals(0, BagMachine::count());
+
+        $payload = [
+            'shifts' => [
+                [
+                    'sync_id'        => 'SHIFT-TEST-001',
+                    'user_email'     => 'nuevo_operario@test.com',
+                    'machine_code'   => 'SEL-NUEVA-01',
+                    'shift_type'     => 'diurno',
+                    'start_time'     => now()->toISOString(),
+                    'end_time'       => null,
+                    'status'         => 'open',
+                    'total_packages' => 2,
+                    'total_weight'   => 50.0,
+                    'notes'          => null,
+                ]
+            ],
+            'productions' => [
+                [
+                    'sync_id'                  => 'PROD-TEST-001',
+                    'shift_sync_id'            => 'SHIFT-TEST-001',
+                    'product_sku'              => 'SKU-NUEVO-99',
+                    'machine_code'             => 'SEL-NUEVA-01',
+                    'user_email'               => 'nuevo_operario@test.com',
+                    'quantity'                 => 10,
+                    'weight'                   => 25.0,
+                    'original_weight'          => 25.0,
+                    'waste_weight_kg'          => 0.5,
+                    'recorded_at'              => now()->toISOString(),
+                    'status'                   => 'pending_review',
+                    'is_printed'               => false,
+                    'weight_quality_grade'     => 'A',
+                    'weight_deviation_percent' => 0.0,
+                    'completed_packages_count' => 1,
+                    'is_package_completed'     => true,
+                    'qr_code'                  => 'PKG-TEST-001',
+                ]
+            ],
+        ];
+
+        // Must import without throwing Attempt to read property id on null
+        $imported = $service->importDeltas($payload);
+
+        $this->assertEquals(2, $imported);
+        $this->assertDatabaseHas('bag_machines', ['code' => 'SEL-NUEVA-01']);
+        $this->assertDatabaseHas('bag_shifts', ['sync_id' => 'SHIFT-TEST-001']);
+        $this->assertDatabaseHas('bag_productions', ['sync_id' => 'PROD-TEST-001']);
+    }
 }
