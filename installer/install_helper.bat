@@ -5,6 +5,12 @@ setlocal enabledelayedexpansion
 set "APP_DIR=C:\laragon\www\jsbolsas"
 cd /d "%APP_DIR%"
 
+:: 0. Ejecutar configuracion integral de Laragon via PowerShell
+if exist "%APP_DIR%\installer\setup.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%\installer\setup.ps1" -ProjectDir "%APP_DIR%"
+    exit /b 0
+)
+
 :: 1. Crear .env local si no existe
 if not exist .env (
     copy /y .env.example .env

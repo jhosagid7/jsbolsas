@@ -56,6 +56,7 @@ Source: "vhost_template.conf"; DestDir: "{app}\etc\apache2\sites-enabled"; DestN
 
 ; 4. Script de Asistencia Post-Instalación
 Source: "install_helper.bat"; DestDir: "{app}\www\jsbolsas\installer"; Flags: ignoreversion
+Source: "setup.ps1"; DestDir: "{app}\www\jsbolsas\installer"; Flags: ignoreversion
 
 ; 5. Script de Actualización Automática
 Source: "..\actualizar_jsbolsas.bat"; DestDir: "{app}\www\jsbolsas"; Flags: ignoreversion
