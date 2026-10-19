@@ -94,7 +94,19 @@ class CloudSyncService
      */
     public function getLastSyncTime(): ?Carbon
     {
-        $lastLog = CloudSyncLog::where('status', 'success')->latest('synced_at')->first();
+        // Si el catálogo básico local está vacío, forzar sincronización total desde el inicio
+        if (RawMaterial::count() === 0 || BagProduct::count() === 0) {
+            return null;
+        }
+
+        $lastLog = CloudSyncLog::where('status', 'success')
+            ->where(function ($q) {
+                $q->where('records_pulled', '>', 0)
+                  ->orWhere('records_pushed', '>', 0);
+            })
+            ->latest('synced_at')
+            ->first();
+
         return $lastLog ? Carbon::parse($lastLog->synced_at) : null;
     }
 
@@ -615,9 +627,13 @@ class CloudSyncService
     /**
      * Descarga los deltas nuevos desde el VPS y los aplica localmente
      */
-    public function pullDeltas(?Carbon $since = null): array
+    public function pullDeltas(?Carbon $since = null, bool $forceFull = false): array
     {
-        $querySince = $since ?: $this->getLastSyncTime();
+        if ($forceFull || RawMaterial::count() === 0 || BagProduct::count() === 0) {
+            $querySince = null;
+        } else {
+            $querySince = $since ?: $this->getLastSyncTime();
+        }
 
         $response = Http::timeout(25)
             ->withHeaders(['X-Sync-Token' => $this->syncToken])
@@ -642,7 +658,7 @@ class CloudSyncService
     /**
      * Ciclo completo de Sincronización Bidireccional (Push + Pull)
      */
-    public function syncAll(): array
+    public function syncAll(bool $forceFull = false): array
     {
         $ping = $this->pingCloud();
         if (!$ping['connected']) {
@@ -671,7 +687,7 @@ class CloudSyncService
             $recordsPushed = $pushRes['pushed'];
 
             // 2. Bajada (Pull)
-            $pullRes = $this->pullDeltas();
+            $pullRes = $this->pullDeltas(null, $forceFull);
             $recordsPulled = $pullRes['pulled'];
 
             CloudSyncLog::create([

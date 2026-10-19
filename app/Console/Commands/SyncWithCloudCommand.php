@@ -7,13 +7,14 @@ use App\Services\CloudSyncService;
 
 class SyncWithCloudCommand extends Command
 {
-    protected $signature = 'cloud:sync {--direction=both : Dirección de sincronización (both, push, pull)}';
+    protected $signature = 'cloud:sync {--direction=both : Dirección de sincronización (both, push, pull)} {--force : Forzar descarga completa desde el inicio}';
     protected $description = 'Sincroniza los registros industriales entre la Fábrica Local y el VPS en la Nube';
 
     public function handle(CloudSyncService $syncService): int
     {
         $direction = $this->option('direction') ?: 'both';
-        $this->info("Iniciando sincronización con VPS ({$syncService->getCloudUrl()}) en modo: [{$direction}]...");
+        $force = (bool)$this->option('force');
+        $this->info("Iniciando sincronización con VPS ({$syncService->getCloudUrl()}) en modo: [{$direction}]" . ($force ? " [FORZANDO COMPLETO]" : "") . "...");
 
         $ping = $syncService->pingCloud();
         if (!$ping['connected']) {
@@ -27,10 +28,10 @@ class SyncWithCloudCommand extends Command
             $res = $syncService->pushDeltas();
             $this->info("📤 Push: " . $res['message']);
         } elseif ($direction === 'pull') {
-            $res = $syncService->pullDeltas();
+            $res = $syncService->pullDeltas(null, $force);
             $this->info("📥 Pull: " . $res['message']);
         } else {
-            $res = $syncService->syncAll();
+            $res = $syncService->syncAll($force);
             if ($res['success']) {
                 $this->info("🔄 Sincronización Bidireccional Completada:");
                 $this->line("   - Subidos: " . ($res['records_pushed'] ?? 0));

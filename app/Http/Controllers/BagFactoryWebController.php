@@ -3210,9 +3210,10 @@ class BagFactoryWebController extends Controller
     /**
      * Dispara una sincronización manual a demanda desde la interfaz de usuario
      */
-    public function cloudSyncManual(CloudSyncService $syncService)
+    public function cloudSyncManual(Request $request, CloudSyncService $syncService)
     {
-        $result = $syncService->syncAll();
+        $force = $request->boolean('force') || \App\Models\RawMaterial::count() === 0 || \App\Models\BagProduct::count() === 0;
+        $result = $syncService->syncAll($force);
         return response()->json($result);
     }
 
