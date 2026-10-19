@@ -22,6 +22,13 @@ for /d %%D in (C:\laragon\bin\php\php-8*) do (
     if exist "%%D\php.exe" set "PHP_BIN=%%D\php.exe"
 )
 
+:: 3.1 Habilitar extensiones criticas en php.ini de Laragon (zip, gd, fileinfo, intl, pdo_mysql)
+for /d %%D in (C:\laragon\bin\php\php-*) do (
+    if exist "%%D\php.ini" (
+        powershell -NoProfile -Command "(Get-Content '%%D\php.ini') -replace ';extension=zip', 'extension=zip' -replace ';extension=fileinfo', 'extension=fileinfo' -replace ';extension=gd', 'extension=gd' -replace ';extension=intl', 'extension=intl' -replace ';extension=pdo_mysql', 'extension=pdo_mysql' | Set-Content '%%D\php.ini'" 2>nul
+    )
+)
+
 :: 4. Localizar binario MySQL en Laragon
 set "MYSQL_BIN=mysql"
 for /d %%D in (C:\laragon\bin\mysql\mysql*) do (
