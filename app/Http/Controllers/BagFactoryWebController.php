@@ -3222,10 +3222,10 @@ class BagFactoryWebController extends Controller
     public function systemUpdate(Request $request, CloudSyncService $syncService, DatabaseBackupService $backupService)
     {
         $user = Auth::user();
-        if (!$user || !$user->isSuperAdmin()) {
+        if (!$user || (!$user->isSuperAdmin() && !$user->isAdmin())) {
             return response()->json([
                 'success' => false,
-                'message' => 'Acceso denegado: Solo el Super Administrador puede actualizar el sistema.',
+                'message' => 'Acceso denegado: Solo el Administrador o Super Administrador puede actualizar el sistema.',
             ], 403);
         }
 

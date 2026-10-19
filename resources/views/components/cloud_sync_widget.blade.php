@@ -25,7 +25,7 @@
                 <span class="cloud-sync-btn-text">Sincronizar VPS</span>
             </button>
         @endif
-        @if(Auth::check() && Auth::user()->isSuperAdmin())
+        @if(Auth::check() && (Auth::user()->isSuperAdmin() || Auth::user()->isAdmin()))
             <div class="d-flex gap-1 w-100">
                 <a href="{{ route('sistema.respaldo.descargar') }}" class="btn btn-outline-success btn-sm fw-bold flex-fill py-1 d-flex align-items-center justify-content-center gap-1 text-decoration-none" style="font-size: 10px; border-radius: 8px;" title="Descargar copia de seguridad de la base de datos (.sql.gz)">
                     <i class="bi bi-database-down"></i>
