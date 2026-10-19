@@ -3254,14 +3254,17 @@ class BagFactoryWebController extends Controller
                 }
             }
 
+            $gitBin = $this->getGitBinary();
+            $phpBin = $this->getPhpBinary();
+
             // Descargar código oficial desde GitHub
             $outputLogs[] = "2. Descargando última versión de GitHub (main)...";
-            $gitFetch = Process::path($basePath)->run('git fetch origin main');
+            $gitFetch = Process::path($basePath)->run("{$gitBin} fetch origin main");
             if (!$gitFetch->successful()) {
                 throw new \Exception('Error al contactar GitHub: ' . $gitFetch->errorOutput());
             }
 
-            $gitReset = Process::path($basePath)->run('git reset --hard origin/main');
+            $gitReset = Process::path($basePath)->run("{$gitBin} reset --hard origin/main");
             if (!$gitReset->successful()) {
                 throw new \Exception('Error al aplicar cambios de Git: ' . $gitReset->errorOutput());
             }
@@ -3269,13 +3272,13 @@ class BagFactoryWebController extends Controller
 
             // Migraciones de Base de Datos
             $outputLogs[] = "3. Aplicando migraciones de base de datos...";
-            $migrate = Process::path($basePath)->run('php artisan migrate --force');
+            $migrate = Process::path($basePath)->run("{$phpBin} artisan migrate --force");
             $outputLogs[] = "   ✓ " . trim($migrate->output());
 
             // Limpiar y regenerar cachés
             $outputLogs[] = "4. Optimizando cachés del sistema...";
-            Process::path($basePath)->run('php artisan optimize:clear');
-            Process::path($basePath)->run('php artisan view:cache');
+            Process::path($basePath)->run("{$phpBin} artisan optimize:clear");
+            Process::path($basePath)->run("{$phpBin} artisan view:cache");
             $outputLogs[] = "   ✓ Caché de vistas y rutas regenerada.";
 
             // Si es local, descargar datos y catálogos nuevos desde el VPS
@@ -3301,6 +3304,41 @@ class BagFactoryWebController extends Controller
                 'logs'    => $outputLogs,
             ], 500);
         }
+    }
+
+    protected function getGitBinary(): string
+    {
+        $possiblePaths = [
+            'git',
+            'C:\\laragon\\bin\\git\\bin\\git.exe',
+            'C:\\laragon\\bin\\git\\cmd\\git.exe',
+            'C:\\Program Files\\Git\\cmd\\git.exe',
+            'C:\\Program Files\\Git\\bin\\git.exe',
+            'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+        ];
+
+        foreach ($possiblePaths as $path) {
+            try {
+                if ($path === 'git' || file_exists($path)) {
+                    $process = Process::run("\"{$path}\" --version");
+                    if ($process->successful()) {
+                        return "\"{$path}\"";
+                    }
+                }
+            } catch (\Throwable $e) {
+                continue;
+            }
+        }
+
+        return 'git';
+    }
+
+    protected function getPhpBinary(): string
+    {
+        if (defined('PHP_BINARY') && PHP_BINARY && file_exists(PHP_BINARY)) {
+            return '"' . PHP_BINARY . '"';
+        }
+        return 'php';
     }
 
     /**
