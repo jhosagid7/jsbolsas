@@ -49,7 +49,7 @@ Source: "tools\jsdesk_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; T
 Source: "tools\JSVPN-Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: jsvpn; Check: NotJSVPNInstalled
 
 ; 2. Archivos del Sistema JSBolsas Pro
-Source: "..\\*"; DestDir: "{app}\www\jsbolsas"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: ".git\*,.github\*,storage\logs\*,node_modules\*,mobile_bolsas_app\build\*,mobile_bolsas_app\.dart_tool\*,installer\tools\*,installer\output\*"
+Source: "..\\*"; DestDir: "{app}\www\jsbolsas"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: ".git\*,.github\*,storage\logs\*,node_modules\*,mobile_bolsas_app\build\*,mobile_bolsas_app\.dart_tool\*,installer\tools\*,installer\output\*,*.env"
 
 ; 3. Host Virtual de Apache para jsbolsas.test
 Source: "vhost_template.conf"; DestDir: "{app}\etc\apache2\sites-enabled"; DestName: "auto.jsbolsas.test.conf"; Flags: ignoreversion

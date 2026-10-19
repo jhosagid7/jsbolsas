@@ -1,4 +1,4 @@
-﻿# PowerShell Post-Installation & Configuration Script for JSBolsas Pro
+# PowerShell Post-Installation & Configuration Script for JSBolsas Pro
 param (
     [string]$ProjectDir = "C:\laragon\www\jsbolsas"
 )
@@ -69,9 +69,17 @@ if (-not (Test-Path $envFile) -and (Test-Path $envExample)) {
 
 if (Test-Path $envFile) {
     $content = Get-Content $envFile -Raw
+    $content = $content -replace '(?m)^APP_ENV=.*', "APP_ENV=production"
+    $content = $content -replace '(?m)^APP_DEBUG=.*', "APP_DEBUG=false"
     $content = $content -replace '(?m)^APP_URL=.*', "APP_URL=$appUrl"
     $content = $content -replace '(?m)^DB_DATABASE=.*', "DB_DATABASE=$dbName"
     
+    if ($content -match '(?m)^DEBUGBAR_ENABLED=') {
+        $content = $content -replace '(?m)^DEBUGBAR_ENABLED=.*', "DEBUGBAR_ENABLED=false"
+    } else {
+        $content += "`nDEBUGBAR_ENABLED=false`n"
+    }
+
     if ($content -notmatch '(?m)^CLOUD_SYNC_URL=') { $content += "`nCLOUD_SYNC_URL=https://bolsas.plasticosmyf.com`n" }
     if ($content -notmatch '(?m)^CLOUD_SYNC_TOKEN=') { $content += "`nCLOUD_SYNC_TOKEN=jsbolsas_secure_sync_token_2026`n" }
     if ($content -notmatch '(?m)^NODE_ROLE=') { $content += "`nNODE_ROLE=local`n" }
@@ -133,10 +141,6 @@ $phpExe = "php"
 $foundPhp = Get-ChildItem -Path "$laragonDir\bin\php" -Filter "php.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($foundPhp) { $phpExe = $foundPhp.FullName }
 
-$mysqlExe = "mysql"
-$foundMysql = Get-ChildItem -Path "$laragonDir\bin\mysql\*\bin" -Filter "mysql.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($foundMysql) { $mysqlExe = $foundMysql.FullName }
-
 # Asegurar que MySQL este en ejecucion
 Start-Service -Name "mysql" -ErrorAction SilentlyContinue
 Start-Service -Name "MySQL" -ErrorAction SilentlyContinue
@@ -144,15 +148,27 @@ Start-Service -Name "MySQL" -ErrorAction SilentlyContinue
 $mysqldProc = Get-Process -Name "mysqld" -ErrorAction SilentlyContinue
 if (-not $mysqldProc) {
     $foundMysqld = Get-ChildItem -Path "$laragonDir\bin\mysql\*\bin" -Filter "mysqld.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    $foundMyIni = Get-ChildItem -Path "$laragonDir\bin\mysql" -Filter "my.ini" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($foundMysqld) {
-        Start-Process -FilePath $foundMysqld.FullName -WindowStyle Hidden
-        Start-Sleep -Seconds 3
+        if ($foundMyIni) {
+            Start-Process -FilePath $foundMysqld.FullName -ArgumentList "--defaults-file=`"$($foundMyIni.FullName)`" --standalone" -WindowStyle Hidden
+        } else {
+            Start-Process -FilePath $foundMysqld.FullName -ArgumentList "--standalone" -WindowStyle Hidden
+        }
     }
 }
 
-# Crear Base de Datos jsbolsas_db
-if (Test-Path $mysqlExe) {
-    Start-Process -FilePath $mysqlExe -ArgumentList "-u root -e ""CREATE DATABASE IF NOT EXISTS $dbName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;""" -WindowStyle Hidden -Wait
+# Crear Base de Datos jsbolsas_db usando PHP PDO con reintentos
+$dbReady = $false
+for ($attempt = 1; $attempt -le 15; $attempt++) {
+    Start-Sleep -Seconds 1
+    $testCode = "try { (new PDO('mysql:host=127.0.0.1;port=3306', 'root', ''))->exec('CREATE DATABASE IF NOT EXISTS $dbName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'); echo 'OK'; } catch (Exception `$e) {}"
+    $result = & "$phpExe" -r "$testCode" 2>$null
+    if ($result -match "OK") {
+        $dbReady = $true
+        Write-Host "MySQL conectado y base de datos $dbName verificada en intento $attempt."
+        break
+    }
 }
 
 # Inicializar Laravel
