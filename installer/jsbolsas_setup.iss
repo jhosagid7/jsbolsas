@@ -29,22 +29,24 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Crear accesos directos en el Escritorio"; GroupDescription: "Accesos Directos:"; Flags: unchecked
+Name: "desktopicon"; Description: "Crear accesos directos en el Escritorio"; GroupDescription: "Accesos Directos:"
 Name: "autostart"; Description: "Iniciar servidor Laragon automáticamente al encender la PC"; GroupDescription: "Opciones de Sistema:"
 
 [Files]
-; 1. Archivos de Laragon Core (Apache, MySQL, PHP, etc.)
-; Si empaquetas el directorio de Laragon local, descomenta la siguiente linea:
-; Source: "C:\laragon\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 1. Herramientas oficiales que se extraen temporalmente y se eliminan tras la instalación
+Source: "tools\laragon-wamp.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NotLaragonInstalled
+Source: "tools\jsdesk_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NotJSDeskInstalled
+Source: "tools\JSVPN-Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NotJSVPNInstalled
 
 ; 2. Archivos del Sistema JSBolsas Pro
-Source: "..\\*"; DestDir: "{app}\www\jsbolsas"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: ".git\*,.github\*,storage\logs\*,node_modules\*,output\*"
+Source: "..\\*"; DestDir: "{app}\www\jsbolsas"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: ".git\*,.github\*,storage\logs\*,node_modules\*,output\*,installer\tools\*,installer\output\*"
 
 ; 3. Host Virtual de Apache para jsbolsas.test
 Source: "vhost_template.conf"; DestDir: "{app}\etc\apache2\sites-enabled"; DestName: "auto.jsbolsas.test.conf"; Flags: ignoreversion
@@ -66,26 +68,79 @@ Name: "{autodesktop}\📊 JSBolsas Pro - Monitor de Planta"; Filename: "{cmd}"; 
 Name: "{autodesktop}\🔄 Actualizar JSBolsas Pro"; Filename: "{app}\www\jsbolsas\actualizar_jsbolsas.bat"; Tasks: desktopicon; Comment: "Sincronizar y Actualizar JSBolsas Pro desde GitHub"
 
 ; Acceso Directo a Soporte Remoto (JSDesk)
-Name: "{autodesktop}\🎧 Soporte Remoto (JSDesk)"; Filename: "{app}\tools\jsdesk\jsdesk.exe"; Tasks: desktopicon; Flags: createonlyiffileexists
+Name: "{autodesktop}\🎧 Soporte Remoto (JSDesk)"; Filename: "{code:GetJSDeskExePath}"; Tasks: desktopicon; Check: IsJSDeskInstalled; Comment: "Abrir Soporte Remoto JSDesk"
 
 ; Inicio Automático de Laragon con Windows
 Name: "{userstartup}\Laragon Servidor Industrial"; Filename: "{app}\laragon.exe"; Parameters: "--minimized"; Tasks: autostart
 
 [Run]
-; 1. Instalar y Configurar JSDesk como Servicio con Contraseña Fija Desatendida
-Filename: "{app}\tools\jsdesk\jsdesk.exe"; Parameters: "--install-service"; Flags: runhidden waituntilterminated; Check: FileExists(ExpandConstant('{app}\tools\jsdesk\jsdesk.exe'))
-Filename: "{app}\tools\jsdesk\jsdesk.exe"; Parameters: "--password {#JSDeskPassword}"; Flags: runhidden waituntilterminated; Check: FileExists(ExpandConstant('{app}\tools\jsdesk\jsdesk.exe'))
+; 1. Instalar Laragon WAMP si no está instalado previamente en la PC
+Filename: "{tmp}\laragon-wamp.exe"; Parameters: "/SILENT /NORESTART /SUPPRESSMSGBOXES"; Flags: runhidden waituntilterminated; Check: NotLaragonInstalled; StatusMsg: "Instalando entorno oficial de servidor Laragon WAMP..."
 
-; 2. Instalar JSVPN (Red Privada Segura)
-Filename: "{app}\tools\jsvpn\jsvpn.exe"; Parameters: "/quiet /norestart"; Flags: runhidden waituntilterminated; Check: FileExists(ExpandConstant('{app}\tools\jsvpn\jsvpn.exe'))
+; 2. Instalar JSDesk SOLO si no está instalado previamente
+Filename: "{tmp}\jsdesk_setup.exe"; Parameters: "--silent-install"; Flags: runhidden waituntilterminated; Check: NotJSDeskInstalled; StatusMsg: "Instalando servicio de soporte remoto JSDesk..."
 
-; 3. Inicializar Base de Datos, Migraciones y Configuración de Fábrica
-Filename: "{app}\www\jsbolsas\installer\install_helper.bat"; Flags: runhidden waituntilterminated
+; 3. Configurar la clave maestra de soporte desatendido en JSDesk (se ejecuta SIEMPRE: tanto si se instaló como si ya existía)
+Filename: "{code:GetJSDeskExePath}"; Parameters: "--password {#JSDeskPassword}"; Flags: runhidden waituntilterminated; Check: IsJSDeskInstalled; StatusMsg: "Configurando clave maestra de soporte en JSDesk..."
 
-; 4. Iniciar Laragon al finalizar instalación
+; 4. Instalar JSVPN (Red Privada Segura) solo si no está instalado
+Filename: "{tmp}\JSVPN-Setup.exe"; Parameters: "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES"; Flags: runhidden waituntilterminated; Check: NotJSVPNInstalled; StatusMsg: "Instalando cliente seguro JSVPN Enterprise..."
+
+; 5. Inicializar Base de Datos, Migraciones y Configuración de Fábrica
+Filename: "{app}\www\jsbolsas\installer\install_helper.bat"; Flags: runhidden waituntilterminated; StatusMsg: "Inicializando base de datos y configuraciones limpias de fábrica..."
+
+; 6. Iniciar Laragon al finalizar instalación
 Filename: "{app}\laragon.exe"; Description: "Iniciar servidor Laragon ahora"; Flags: nowait postinstall skipifsilent
 
 [Code]
+// Detección de JSDesk instalado en 64 o 32 bits
+function GetJSDeskExePath(Param: string): string;
+begin
+  if FileExists(ExpandConstant('{autopf}\JSDesk\JSDesk.exe')) then
+    Result := ExpandConstant('{autopf}\JSDesk\JSDesk.exe')
+  else if FileExists(ExpandConstant('{autopf32}\JSDesk\JSDesk.exe')) then
+    Result := ExpandConstant('{autopf32}\JSDesk\JSDesk.exe')
+  else if FileExists('C:\Program Files\JSDesk\JSDesk.exe') then
+    Result := 'C:\Program Files\JSDesk\JSDesk.exe'
+  else if FileExists('C:\Program Files (x86)\JSDesk\JSDesk.exe') then
+    Result := 'C:\Program Files (x86)\JSDesk\JSDesk.exe'
+  else
+    Result := '';
+end;
+
+function IsJSDeskInstalled(): Boolean;
+begin
+  Result := (GetJSDeskExePath('') <> '');
+end;
+
+function NotJSDeskInstalled(): Boolean;
+begin
+  Result := not IsJSDeskInstalled();
+end;
+
+// Detección de Laragon
+function IsLaragonInstalled(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{app}\laragon.exe')) or FileExists('C:\laragon\laragon.exe');
+end;
+
+function NotLaragonInstalled(): Boolean;
+begin
+  Result := not IsLaragonInstalled();
+end;
+
+// Detección de JSVPN
+function IsJSVPNInstalled(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{autopf}\JSVPN\jsvpn.exe')) or
+            FileExists('C:\Program Files\JSVPN\jsvpn.exe');
+end;
+
+function NotJSVPNInstalled(): Boolean;
+begin
+  Result := not IsJSVPNInstalled();
+end;
+
 // Procedimiento para agregar '127.0.0.1 jsbolsas.test' al archivo hosts de Windows
 procedure AddToHostsFile();
 var
