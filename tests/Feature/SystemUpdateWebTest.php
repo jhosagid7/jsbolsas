@@ -31,11 +31,11 @@ class SystemUpdateWebTest extends TestCase
 
         // Fake all shell process calls to avoid executing actual git/artisan during testing
         Process::fake([
-            'git fetch origin main' => Process::result(output: 'Fetching main', exitCode: 0),
-            'git reset --hard origin/main' => Process::result(output: 'HEAD is now at c24d775f', exitCode: 0),
-            'php artisan migrate --force' => Process::result(output: 'Nothing to migrate', exitCode: 0),
-            'php artisan optimize:clear' => Process::result(output: 'Caches cleared', exitCode: 0),
-            'php artisan view:cache' => Process::result(output: 'Views cached', exitCode: 0),
+            '*fetch origin main*' => Process::result(output: 'Fetching main', exitCode: 0),
+            '*reset --hard origin/main*' => Process::result(output: 'HEAD is now at c24d775f', exitCode: 0),
+            '*migrate --force*' => Process::result(output: 'Nothing to migrate', exitCode: 0),
+            '*optimize:clear*' => Process::result(output: 'Caches cleared', exitCode: 0),
+            '*view:cache*' => Process::result(output: 'Views cached', exitCode: 0),
         ]);
 
         $response = $this->postJson('/sistema/actualizar');

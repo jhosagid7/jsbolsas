@@ -3267,12 +3267,12 @@ class BagFactoryWebController extends Controller
 
             // Descargar código oficial desde GitHub
             $outputLogs[] = "2. Descargando última versión de GitHub (main)...";
-            $gitFetch = Process::path($basePath)->run("{$gitBin} fetch origin main");
+            $gitFetch = Process::path($basePath)->run("{$gitBin} -c safe.directory=* fetch origin main");
             if (!$gitFetch->successful()) {
                 throw new \Exception('Error al contactar GitHub: ' . $gitFetch->errorOutput());
             }
 
-            $gitReset = Process::path($basePath)->run("{$gitBin} reset --hard origin/main");
+            $gitReset = Process::path($basePath)->run("{$gitBin} -c safe.directory=* reset --hard origin/main");
             if (!$gitReset->successful()) {
                 throw new \Exception('Error al aplicar cambios de Git: ' . $gitReset->errorOutput());
             }
