@@ -625,20 +625,42 @@ class BagProduct extends Model
         $bobProd = $bobina->product;
         if (!$bobProd) return null;
 
-        // 0. Una bobina intermedia no puede seleccionarse como bolsa terminada
+        // 0. Una bobina intermedia o insumo no puede seleccionarse como bolsa terminada para sellado
+        $upperName = strtoupper($this->name ?? '');
+        $upperUnit = strtoupper($this->sale_unit ?? '');
+        $upperCat = strtoupper($this->category ?? '');
         if ($this->is_variable_quantity 
-            || in_array(strtoupper($this->sale_unit ?? ''), ['BOBINA', 'ROLLO', 'KG'])
-            || str_contains(strtoupper($this->category ?? ''), 'BOBINA')
-            || str_contains(strtoupper($this->category ?? ''), 'MANGA')
-            || str_contains(strtoupper($this->name ?? ''), 'BOBINA MANGA')) {
-            return "Las bobinas de manga son materia prima intermedia de extrusión, no pueden seleccionarse como bolsa terminada para sellado.";
+            || in_array($upperUnit, ['BOBINA', 'ROLLO', 'KG'])
+            || str_contains($upperCat, 'BOBINA')
+            || str_contains($upperCat, 'MANGA')
+            || str_contains($upperName, 'BOBINA')
+            || str_contains($upperName, 'MANGA')) {
+            return "Las bobinas o rollos son insumos de extrusión, no pueden seleccionarse como bolsa terminada para sellado.";
         }
 
         // 1. Validar Ancho (cm)
         $bobWidth = (float)$bobProd->effective_width_cm;
         $bagWidth = (float)$this->effective_width_cm;
-        if ($bobWidth > 0 && $bagWidth > 0 && abs($bobWidth - $bagWidth) > 0.5) {
-            return "El ancho de la bolsa ({$bagWidth} cm) no coincide con el ancho de la bobina ({$bobWidth} cm).";
+        if ($bobWidth > 0) {
+            if ($bagWidth <= 0) {
+                return "La bolsa no tiene un ancho válido registrado en su ficha técnica.";
+            }
+            if (abs($bobWidth - $bagWidth) > 0.5) {
+                return "El ancho de la bolsa ({$bagWidth} cm) no coincide con el ancho de la bobina ({$bobWidth} cm).";
+            }
+        }
+
+        // 1.1 Validar Calibre (si ambos tienen calibre especificado > 0)
+        $bobCal = (float)$bobProd->gauge_caliber;
+        $bagCal = (float)$this->gauge_caliber;
+        if ($bobCal > 0 && $bagCal > 0) {
+            $normBob = $bobCal > 0.1 ? $bobCal / 1000 : $bobCal;
+            $normBag = $bagCal > 0.1 ? $bagCal / 1000 : $bagCal;
+            if (abs($normBob - $normBag) > 0.0006) {
+                $bobLabel = round($normBob * 1000, 1);
+                $bagLabel = round($normBag * 1000, 1);
+                return "El calibre de la bobina (C-{$bobLabel}) no coincide con el calibre requerido para la bolsa (C-{$bagLabel}).";
+            }
         }
 
         // 2. Validar Fuelle (Plana vs Con Fuelle)

@@ -192,44 +192,36 @@
     @else
         {{-- ESTACIÓN DE CARGA RÁPIDA (TOUCH FRIENDLY) --}}
         <div class="card border-0 p-3 p-md-4 mb-4 shadow" style="background: #1e293b; border-radius: 16px; border: 1px solid #334155 !important;">
-            <form action="{{ route('operator.store_batch') }}" method="POST" id="batchProductionForm">
-                @csrf
-                <input type="hidden" name="machine_id" value="{{ $activeShift->machine_id }}">
-                <input type="hidden" name="print_mode" id="printModeInput" value="direct_print">
-                @if(!$user->isOperator())
-                    <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
-                @endif
+            @php
+                $isExtrusionMachine = ($activeShift->machine && $activeShift->machine->type === 'extrusora');
+            @endphp
 
-                @php
-                    $isExtrusionMachine = ($activeShift->machine && $activeShift->machine->type === 'extrusora');
-                @endphp
-
-                @if($isExtrusionMachine)
-                    {{-- PANEL DE CONTROL DE EXTRUSIÓN: RECETA Y MERMA DE PURGA --}}
-                    <div class="p-3 mb-3 rounded-3 border" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%); border-color: rgba(56, 189, 248, 0.4) !important;">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-info text-dark fw-bold px-2 py-1 fs-6">🌀 MÓDULO EXTRUSORA</span>
-                                <span class="text-white small fw-bold">Manga Continua & Bobinado</span>
-                            </div>
-                            <button type="button" class="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm"
-                                    data-bs-toggle="modal" data-bs-target="#wasteRecordModal">
-                                <span>⚠️</span> Registrar Merma / Purga de Calibración
-                            </button>
+            @if($isExtrusionMachine)
+                {{-- PANEL DE CONTROL DE EXTRUSIÓN: RECETA Y MERMA DE PURGA --}}
+                <div class="p-3 mb-3 rounded-3 border" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%); border-color: rgba(56, 189, 248, 0.4) !important;">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-info text-dark fw-bold px-2 py-1 fs-6">🌀 MÓDULO EXTRUSORA</span>
+                            <span class="text-white small fw-bold">Manga Continua & Bobinado</span>
                         </div>
-                        <div class="row g-2 align-items-center">
-                            <div class="col-12 col-md-7">
-                                <label class="form-label text-white-50 small mb-1 fw-bold">
-                                    🧪 Fórmula / Receta de Mezcla Activa:
-                                </label>
-                                <select name="production_formula_id" id="productionFormulaSelect" class="form-select bg-dark text-white border-info fw-bold">
-                                    <option value="">-- Usar Fórmula Predeterminada del Producto --</option>
-                                    @foreach($formulas as $form)
-                                        <option value="{{ $form->id }}">
-                                            🧪 {{ $form->name }} ({{ $form->code ?? 'S/C' }})
-                                        </option>
-                                    @endforeach
-                                </select>
+                        <button type="button" class="btn btn-warning btn-sm fw-bold d-flex align-items-center gap-1 shadow-sm"
+                                data-bs-toggle="modal" data-bs-target="#wasteRecordModal">
+                            <span>⚠️</span> Registrar Merma / Purga de Calibración
+                        </button>
+                    </div>
+                    <div class="row g-2 align-items-center">
+                        <div class="col-12 col-md-7">
+                            <label class="form-label text-white-50 small mb-1 fw-bold">
+                                🧪 Fórmula / Receta de Mezcla Activa:
+                            </label>
+                            <select name="production_formula_id" id="productionFormulaSelect" form="batchProductionForm" class="form-select bg-dark text-white border-info fw-bold">
+                                <option value="">-- Usar Fórmula Predeterminada del Producto --</option>
+                                @foreach($formulas as $form)
+                                    <option value="{{ $form->id }}">
+                                        🧪 {{ $form->name }} ({{ $form->code ?? 'S/C' }})
+                                    </option>
+                                @endforeach
+                            </select>
                             </div>
                             <div class="col-12 col-md-5">
                                 <div class="small text-white-50 p-2 rounded bg-black bg-opacity-30 border border-secondary mt-md-3">
@@ -439,7 +431,16 @@
                     </div>
                 @endif
 
-                @if($isExtrusionMachine)
+                {{-- FORMULARIO PRINCIPAL DE CARGA DE BÁSCULA Y PESAJE --}}
+                <form action="{{ route('operator.store_batch') }}" method="POST" id="batchProductionForm">
+                    @csrf
+                    <input type="hidden" name="machine_id" value="{{ $activeShift->machine_id }}">
+                    <input type="hidden" name="print_mode" id="printModeInput" value="direct_print">
+                    @if(!$user->isOperator())
+                        <input type="hidden" name="operator_id" value="{{ $targetUser->id }}">
+                    @endif
+
+                    @if($isExtrusionMachine)
                     {{-- MODO EXTRUSORA: MANGA CONTINUA & PARÁMETROS TÉCNICOS DIRECTOS --}}
                     <input type="hidden" name="is_extrusion_direct" value="1">
                     <input type="hidden" name="product_id" id="selectedProductId" value="">
@@ -1088,6 +1089,7 @@
                 'id'          => $p->id,
                 'name'        => $p->name,
                 'sku'         => $p->sku ?? '',
+                'category'    => $p->category ?? '',
                 'sale_unit'   => $p->sale_unit ?? '',
                 'theoretical' => (float)($p->unit_weight_kg > 0 ? $p->unit_weight_kg : 1.0),
                 'target'      => $t,
@@ -1112,6 +1114,7 @@
             'code'       => $mountedBobina->effective_batch_code,
             'name'       => $mProd?->name ?? 'Bobina Madre',
             'width_cm'   => (float)($mProd?->effective_width_cm ?? 0),
+            'caliber'    => (float)($mProd?->gauge_caliber ?? 0),
             'material'   => $mProd?->effective_material_type ?? 'Baja Densidad',
             'has_gusset' => (bool)($mProd?->effective_has_gusset ?? false),
             'gusset_cm'  => (float)($mProd?->gusset_cm ?? 0),
@@ -1137,7 +1140,7 @@
     }
 
     productsCatalog.forEach(p => {
-        p._searchStr = normalizeStr(`${p.name} ${p.sku} ${p.sale_unit} ${p.material || ''}`);
+        p._searchStr = normalizeStr(`${p.name} ${p.sku} ${p.category || ''} ${p.sale_unit} ${p.material || ''}`);
     });
 
     let currentFiltered = [];
@@ -1149,21 +1152,53 @@
         if (!mountedBobinaSpec) return { compatible: true, error: null };
 
         // 0. Una bobina intermedia no puede seleccionarse como bolsa terminada para sellar
-        if (p.is_variable || (p.sale_unit && p.sale_unit.toUpperCase() === 'BOBINA') || (p.name && p.name.toUpperCase().includes('BOBINA MANGA'))) {
+        const upperName = (p.name || '').toUpperCase();
+        const upperUnit = (p.sale_unit || '').toUpperCase();
+        const upperCat = (p.category || '').toUpperCase();
+        if (p.is_variable 
+            || ['BOBINA', 'ROLLO', 'KG'].includes(upperUnit)
+            || upperCat.includes('BOBINA')
+            || upperCat.includes('MANGA')
+            || upperName.includes('BOBINA')
+            || upperName.includes('MANGA')) {
             return {
                 compatible: false,
-                error: 'Este registro es una bobina intermedia de extrusión, no una bolsa terminada para sellar'
+                error: 'Este registro es una bobina o insumo intermedio de extrusión, no una bolsa terminada para sellar'
             };
         }
 
         // 1. Validar Ancho (tolerancia de 0.5 cm)
         const bobWidth = parseFloat(mountedBobinaSpec.width_cm || 0);
         const bagWidth = parseFloat(p.width_cm || 0);
-        if (bobWidth > 0 && bagWidth > 0 && Math.abs(bobWidth - bagWidth) > 0.5) {
-            return {
-                compatible: false,
-                error: `El ancho de la bolsa (${bagWidth} cm) no coincide con la bobina (${bobWidth} cm)`
-            };
+        if (bobWidth > 0) {
+            if (bagWidth <= 0) {
+                return {
+                    compatible: false,
+                    error: 'La bolsa no tiene un ancho válido registrado en su ficha técnica'
+                };
+            }
+            if (Math.abs(bobWidth - bagWidth) > 0.5) {
+                return {
+                    compatible: false,
+                    error: `El ancho de la bolsa (${bagWidth} cm) no coincide con la bobina (${bobWidth} cm)`
+                };
+            }
+        }
+
+        // 1.1 Validar Calibre (si ambos tienen calibre especificado > 0)
+        const bobCal = parseFloat(mountedBobinaSpec.caliber || 0);
+        const bagCal = parseFloat(p.caliber || 0);
+        if (bobCal > 0 && bagCal > 0) {
+            const normBob = bobCal > 0.1 ? bobCal / 1000 : bobCal;
+            const normBag = bagCal > 0.1 ? bagCal / 1000 : bagCal;
+            if (Math.abs(normBob - normBag) > 0.0006) {
+                const bobLabel = Math.round(normBob * 1000 * 10) / 10;
+                const bagLabel = Math.round(normBag * 1000 * 10) / 10;
+                return {
+                    compatible: false,
+                    error: `El calibre de la bobina (C-${bobLabel}) no coincide con el calibre requerido para la bolsa (C-${bagLabel})`
+                };
+            }
         }
 
         // 2. Validar Formato (Fuelle vs Plana)

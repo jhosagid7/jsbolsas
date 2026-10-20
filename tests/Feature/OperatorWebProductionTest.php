@@ -474,4 +474,110 @@ class OperatorWebProductionTest extends TestCase
         $response->assertRedirect(route('operator.station', ['operator_id' => $this->operator->id]));
         $this->assertEquals('closed', $shift->fresh()->status);
     }
+
+    public function test_superadmin_can_delete_production_batch(): void
+    {
+        $superadmin = User::factory()->create([
+            'name'    => 'Super Admin User',
+            'email'   => 'super@jsbolsas.test',
+            'profile' => 'superadmin',
+        ]);
+
+        $shift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->machine->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+        ]);
+
+        $production = BagProduction::create([
+            'bag_shift_id' => $shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $this->productA->id,
+            'machine_id'   => $this->machine->id,
+            'quantity'     => 10,
+            'weight'       => 45.0,
+            'status'       => 'approved',
+            'is_printed'   => true,
+            'printed_at'   => now(),
+            'recorded_at'  => now(),
+        ]);
+
+        $response = $this->actingAs($superadmin)->delete(route('operator.destroy_batch', $production->id));
+        $response->assertRedirect(route('operator.station'));
+        $this->assertDatabaseMissing('bag_productions', ['id' => $production->id]);
+    }
+
+    public function test_bobina_compatibility_excludes_bobinas_and_validates_width_and_caliber(): void
+    {
+        // Bobina madre de 18 cm, Baja Densidad, Plana, Calibre 1.5 (0.0015 / C-1.5)
+        $bobinaProduct = BagProduct::create([
+            'name'                 => 'BOBINA BAJA DENSIDAD 18 CM',
+            'category'             => 'Bobinas',
+            'sale_unit'            => 'BOBINA',
+            'sku'                  => 'BOB-BD-18',
+            'width_inch'           => 7.09, // ~18 cm
+            'gauge_caliber'        => 1.5,
+            'material_type'        => 'Baja Densidad',
+            'has_gusset'           => false,
+            'is_variable_quantity' => true,
+            'is_active'            => true,
+        ]);
+
+        $shift = BagShift::create([
+            'user_id'    => $this->operator->id,
+            'machine_id' => $this->machine->id,
+            'shift_type' => 'diurno',
+            'start_time' => now(),
+            'status'     => 'open',
+        ]);
+
+        $mountedBobina = BagProduction::create([
+            'bag_shift_id' => $shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $bobinaProduct->id,
+            'machine_id'   => $this->machine->id,
+            'quantity'     => 1,
+            'weight'       => 25.0,
+            'status'       => 'approved',
+            'recorded_at'  => now(),
+        ]);
+
+        // Insumo Bambi Bobina (incompatible por ser bobina y por ancho/calibre)
+        $bambiProduct = BagProduct::create([
+            'name'                 => 'BOBINA DE BAMBI (3.5CM X1KG) C-18',
+            'category'             => 'Bobinas',
+            'sale_unit'            => 'BOBINA',
+            'sku'                  => 'BAM-18',
+            'width_inch'           => 0.0,
+            'gauge_caliber'        => 18.0,
+            'material_type'        => 'Baja Densidad',
+            'has_gusset'           => false,
+            'is_variable_quantity' => true,
+            'is_active'            => true,
+        ]);
+
+        $this->assertFalse($bambiProduct->isCompatibleWithBobina($mountedBobina));
+        $this->assertNotNull($bambiProduct->getBobinaCompatibilityError($mountedBobina));
+
+        // Bolsa terminada compatible: 18 cm, Plana, Baja Densidad, Calibre 1.5
+        $compatibleBag = BagProduct::create([
+            'name'                   => 'BOLSA 18X25 BAJA DENSIDAD PLANA',
+            'category'               => 'Bolsas',
+            'sale_unit'              => 'MILLAR',
+            'sku'                    => 'BOL-1825-BD',
+            'width_inch'             => 7.09, // ~18 cm
+            'gauge_caliber'          => 1.5,
+            'material_type'          => 'Baja Densidad',
+            'has_gusset'             => false,
+            'is_variable_quantity'   => false,
+            'is_active'              => true,
+            'unit_weight_kg'         => 3.0,
+            'target_units_per_shift' => 15,
+        ]);
+
+        $this->assertTrue($compatibleBag->isCompatibleWithBobina($mountedBobina));
+        $this->assertNull($compatibleBag->getBobinaCompatibilityError($mountedBobina));
+    }
 }

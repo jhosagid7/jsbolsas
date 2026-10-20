@@ -2550,11 +2550,16 @@ class BagFactoryWebController extends Controller
 
         // Para la selladora, el catálogo de productos disponibles son BOLSAS TERMINADAS (no bobinas intermedias)
         $finishedBagProducts = $products->filter(function ($p) {
+            $upperName = strtoupper($p->name ?? '');
+            $upperCat = strtoupper($p->category ?? '');
+            $upperUnit = strtoupper($p->sale_unit ?? '');
             $isBobina = (bool)($p->is_variable_quantity 
-                || in_array(strtoupper($p->sale_unit ?? ''), ['BOBINA', 'ROLLO', 'KG'])
-                || str_contains(strtoupper($p->category ?? ''), 'BOBINA')
-                || str_contains(strtoupper($p->category ?? ''), 'MANGA')
-                || str_contains(strtoupper($p->name ?? ''), 'BOBINA MANGA'));
+                || in_array($upperUnit, ['BOBINA', 'ROLLO', 'KG'])
+                || str_contains($upperCat, 'BOBINA')
+                || str_contains($upperCat, 'MANGA')
+                || str_contains($upperName, 'BOBINA')
+                || str_contains($upperName, 'MANGA')
+                || (float)$p->effective_width_cm <= 0);
             return !$isBobina;
         })->values();
 
@@ -2569,6 +2574,7 @@ class BagFactoryWebController extends Controller
                 'id'          => $p->id,
                 'name'        => $p->name,
                 'sku'         => $p->sku ?? '',
+                'category'    => $p->category ?? '',
                 'sale_unit'   => $p->sale_unit ?? '',
                 'theoretical' => (float)($p->unit_weight_kg > 0 ? $p->unit_weight_kg : 1.0),
                 'target'      => $target,
@@ -3063,18 +3069,20 @@ class BagFactoryWebController extends Controller
         $user = Auth::user();
 
         // Candado de Seguridad Industrial:
-        if ($user->role !== 'admin' && $prod->is_printed) {
+        $canBypassLock = ($user->isAdmin() || $user->isSuperAdmin() || $user->isSupervisor());
+
+        if (!$canBypassLock && $prod->is_printed) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Este pesaje ya fue impreso y sellado con etiqueta física. Comuníquese con el Jefe de Operaciones para anularlo.',
+                    'message' => 'Este pesaje ya fue impreso y sellado con etiqueta física. Comuníquese con el Administrador o Supervisor para anularlo.',
                 ], 403);
             }
-            return redirect()->back()->with('error', 'Este pesaje ya fue impreso y sellado con etiqueta física. Comuníquese con el Jefe de Operaciones para anularlo.');
+            return redirect()->back()->with('error', 'Este pesaje ya fue impreso y sellado con etiqueta física. Comuníquese con el Administrador o Supervisor para anularlo.');
         }
 
-        // Si no es admin y no es el dueño del registro
-        if ($user->role !== 'admin' && $prod->user_id !== $user->id) {
+        // Si no es admin/supervisor y no es el dueño del registro
+        if (!$canBypassLock && (int)$prod->user_id !== (int)$user->id) {
             abort(403, 'No tiene permiso para eliminar este pesaje.');
         }
 
