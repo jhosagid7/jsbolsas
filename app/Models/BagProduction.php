@@ -74,11 +74,27 @@ class BagProduction extends Model
         parent::boot();
 
         static::creating(function ($production) {
+            if (empty($production->sync_id)) {
+                $production->sync_id = 'PROD-' . (string)Str::uuid();
+            }
+            if (empty($production->recorded_at)) {
+                $production->recorded_at = now();
+            }
             if (empty($production->qr_code)) {
                 $production->qr_code = 'PKG-' . strtoupper(Str::random(10));
             }
             if (empty($production->weight_quality_grade)) {
                 $production->weight_quality_grade = 'B';
+            }
+        });
+
+        static::deleted(function ($production) {
+            $syncId = $production->sync_id ?: ('PROD-' . $production->id);
+            if (\Illuminate\Support\Facades\Schema::hasTable('cloud_sync_deletions')) {
+                \App\Models\CloudSyncDeletion::firstOrCreate([
+                    'entity_type' => 'production',
+                    'sync_id'     => $syncId,
+                ]);
             }
         });
     }

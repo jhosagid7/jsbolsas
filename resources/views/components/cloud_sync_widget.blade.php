@@ -54,6 +54,41 @@
     if (window._cloudSyncInitialized) return;
     window._cloudSyncInitialized = true;
 
+    let isAutoSyncing = false;
+    let autoSyncCooldown = false;
+
+    function triggerSilentSync() {
+        if (isAutoSyncing || autoSyncCooldown) return;
+        isAutoSyncing = true;
+
+        const allDots = document.querySelectorAll('.cloud-sync-dot');
+        allDots.forEach(d => {
+            d.className = 'cloud-sync-dot spinner-border spinner-border-sm text-info';
+        });
+
+        fetch('{{ route('cloud_sync.manual') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            isAutoSyncing = false;
+            autoSyncCooldown = true;
+            // Cooldown de 30s para evitar saturación de peticiones
+            setTimeout(() => { autoSyncCooldown = false; }, 30000);
+            checkSyncStatus();
+        })
+        .catch(() => {
+            isAutoSyncing = false;
+            autoSyncCooldown = true;
+            setTimeout(() => { autoSyncCooldown = false; }, 45000);
+        });
+    }
+
     function updateStatusUI(data) {
         if (!data) return;
         const pending = parseInt(data.pending_count || 0);
@@ -94,6 +129,11 @@
                 dot.className = 'cloud-sync-dot spinner-grow spinner-grow-sm text-success';
             }
         });
+
+        // Si hay datos pendientes en nodo local, disparar auto-sincronización silenciosa en segundo plano
+        if (!data.is_cloud && pending > 0) {
+            triggerSilentSync();
+        }
     }
 
     function checkSyncStatus() {
@@ -217,6 +257,12 @@
     });
 
     document.addEventListener('DOMContentLoaded', checkSyncStatus);
-    setInterval(checkSyncStatus, 60000);
+    setInterval(checkSyncStatus, 45000);
+    setInterval(() => {
+        const isCloudNode = '{{ env('NODE_ROLE', 'local') }}' === 'cloud';
+        if (!isCloudNode) {
+            triggerSilentSync();
+        }
+    }, 90000);
 })();
 </script>

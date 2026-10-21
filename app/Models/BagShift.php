@@ -33,6 +33,27 @@ class BagShift extends Model
         'total_weight'   => 'decimal:4',
     ];
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($shift) {
+            if (empty($shift->sync_id)) {
+                $shift->sync_id = 'SHIFT-' . (string)\Illuminate\Support\Str::uuid();
+            }
+        });
+
+        static::deleted(function ($shift) {
+            $syncId = $shift->sync_id ?: ('SHIFT-' . $shift->id);
+            if (\Illuminate\Support\Facades\Schema::hasTable('cloud_sync_deletions')) {
+                \App\Models\CloudSyncDeletion::firstOrCreate([
+                    'entity_type' => 'shift',
+                    'sync_id'     => $syncId,
+                ]);
+            }
+        });
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

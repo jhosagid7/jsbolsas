@@ -12,7 +12,13 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Bag Factory scheduled jobs
+        // Sincronización automática periódica bidireccional con el VPS en nodos satélites locales
+        if (config('services.cloud_sync.node_role', env('NODE_ROLE', 'local')) === 'local') {
+            $schedule->command('cloud:sync --direction=both')
+                ->everyTwoMinutes()
+                ->withoutOverlapping()
+                ->runInBackground();
+        }
     }
 
     /**

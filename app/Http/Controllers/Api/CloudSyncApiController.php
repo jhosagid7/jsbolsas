@@ -125,11 +125,24 @@ class CloudSyncApiController extends Controller
         try {
             $deltas = $this->syncService->exportDeltas($since);
 
+            $totalExported = count($deltas['machines'] ?? [])
+                + count($deltas['shifts'] ?? [])
+                + count($deltas['productions'] ?? [])
+                + count($deltas['raw_materials'] ?? [])
+                + count($deltas['stocks'] ?? [])
+                + count($deltas['transfers'] ?? [])
+                + count($deltas['formulas'] ?? [])
+                + count($deltas['products'] ?? [])
+                + count($deltas['audits'] ?? [])
+                + count($deltas['deletions'] ?? [])
+                + (!empty($deltas['cost_settings']) ? 1 : 0)
+                + count($deltas['users'] ?? []);
+
             CloudSyncLog::create([
                 'node_role'      => 'cloud',
                 'direction'      => 'pull',
                 'status'         => 'success',
-                'records_pushed' => count($deltas['products'] ?? []) + count($deltas['formulas'] ?? []),
+                'records_pushed' => $totalExported,
                 'records_pulled' => 0,
                 'details'        => ['ip' => $request->ip()],
                 'synced_at'      => now(),

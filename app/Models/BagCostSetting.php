@@ -39,20 +39,22 @@ class BagCostSetting extends Model
 
     public static function getSettings(): self
     {
-        return self::firstOrCreate(
-            ['id' => 1],
-            [
-                'resin_price_per_kg'   => 1.4000,
-                'shift_fixed_cost'     => 25.0000,
-                'daily_profit_target'  => 100.0000,
-                'margin_40_multiplier' => 1.40,
-                'margin_45_multiplier' => 1.45,
-                'margin_50_multiplier' => 1.50,
-                'margin_60_multiplier' => 1.65,
-                'tier1_multiplier'     => 1.10,
-                'tier2_multiplier'     => 1.17,
-                'tier3_multiplier'     => 1.21,
-            ]
-        );
+        $existing = self::first();
+        if ($existing) {
+            return $existing;
+        }
+
+        return self::create([
+            'resin_price_per_kg'   => 1.4000,
+            'shift_fixed_cost'     => 25.0000,
+            'daily_profit_target'  => 100.0000,
+            'margin_40_multiplier' => 1.40,
+            'margin_45_multiplier' => 1.45,
+            'margin_50_multiplier' => 1.50,
+            'margin_60_multiplier' => 1.65,
+            'tier1_multiplier'     => 1.10,
+            'tier2_multiplier'     => 1.17,
+            'tier3_multiplier'     => 1.21,
+        ]);
     }
 }

@@ -13,6 +13,7 @@ class RawMaterialAudit extends Model
     protected $table = 'raw_material_audits';
 
     protected $fillable = [
+        'sync_id',
         'audit_date',
         'period_start',
         'period_end',
@@ -28,6 +29,17 @@ class RawMaterialAudit extends Model
         'audited_by',
         'notes',
     ];
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($audit) {
+            if (empty($audit->sync_id)) {
+                $audit->sync_id = 'AUDIT-' . (string)\Illuminate\Support\Str::uuid();
+            }
+        });
+    }
 
     protected $casts = [
         'audit_date'              => 'date',
@@ -46,5 +58,10 @@ class RawMaterialAudit extends Model
     public function auditor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'audited_by');
+    }
+
+    public function auditedByUser(): BelongsTo
+    {
+        return $this->auditor();
     }
 }

@@ -2983,6 +2983,8 @@ class BagFactoryWebController extends Controller
         $wasteFeedback = $wasteWeight > 0 ? " (+ {$wasteWeight} Kg de purga/merma)" : "";
         $successMsg = "Pesaje de {$qty} {$unitLabel} registrado correctamente ({$production->weight_grade_label}){$wasteFeedback}";
 
+        $this->triggerAsyncCloudSync();
+
         if ($isDirectPrint) {
             session()->flash('success', $successMsg);
             $ticketParams = [
@@ -3051,6 +3053,8 @@ class BagFactoryWebController extends Controller
         // Recalcular finanzas del turno
         $prod->shift?->recalculateFinancials();
 
+        $this->triggerAsyncCloudSync();
+
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
@@ -3111,6 +3115,8 @@ class BagFactoryWebController extends Controller
 
         $shift?->recalculateFinancials();
 
+        $this->triggerAsyncCloudSync();
+
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
@@ -3150,6 +3156,8 @@ class BagFactoryWebController extends Controller
             'status'     => 'open',
             'sync_id'    => 'SHIFT-WEB-' . Str::uuid(),
         ]);
+
+        $this->triggerAsyncCloudSync();
 
         $redirectParams = (!$user->isOperator() && $request->filled('operator_id')) ? ['operator_id' => $targetUserId] : [];
         return redirect()->route('operator.station', $redirectParams)->with('success', 'Turno iniciado correctamente.');
@@ -3518,5 +3526,19 @@ class BagFactoryWebController extends Controller
         }
 
         return $deductions;
+    }
+
+    /**
+     * Dispara una sincronización push en tiempo real hacia el VPS de forma no bloqueante
+     */
+    protected function triggerAsyncCloudSync(): void
+    {
+        if (config('services.cloud_sync.node_role', env('NODE_ROLE', 'local')) === 'local') {
+            try {
+                app(\App\Services\CloudSyncService::class)->pushDeltas();
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Sincronización en tiempo real no pudo contactar VPS (quedará para auto-sync): ' . $e->getMessage());
+            }
+        }
     }
 }

@@ -337,5 +337,122 @@ class CloudSyncBidirectionalTest extends TestCase
         $this->assertEquals('supervisor', $importedUser->role);
         $this->assertTrue(\Illuminate\Support\Facades\Hash::check('secretpassword123', $importedUser->password));
     }
+
+    public function test_deletions_are_exported_and_imported_idempotently_without_resurrection()
+    {
+        $service = app(CloudSyncService::class);
+
+        $user = User::factory()->create(['role' => 'operator']);
+        $machine = BagMachine::create(['name' => 'Selladora 1', 'code' => 'SEL-01', 'type' => 'selladora']);
+        $product = BagProduct::create(['name' => 'Bolsa 20x30', 'sku' => 'BOL-2030', 'price' => 5]);
+        $shift = BagShift::create(['user_id' => $user->id, 'machine_id' => $machine->id, 'shift_type' => 'diurno', 'start_time' => now()]);
+
+        $production = BagProduction::create([
+            'bag_shift_id' => $shift->id,
+            'user_id'      => $user->id,
+            'machine_id'   => $machine->id,
+            'product_id'   => $product->id,
+            'quantity'     => 5,
+            'weight'       => 15.0,
+            'sync_id'      => 'PROD-DEL-TEST-001',
+        ]);
+
+        $this->assertDatabaseHas('bag_productions', ['sync_id' => 'PROD-DEL-TEST-001']);
+
+        // Eliminar producción en local
+        $production->delete();
+        $this->assertDatabaseMissing('bag_productions', ['sync_id' => 'PROD-DEL-TEST-001']);
+        $this->assertDatabaseHas('cloud_sync_deletions', [
+            'entity_type' => 'production',
+            'sync_id'     => 'PROD-DEL-TEST-001',
+        ]);
+
+        // Exportar deltas debe contener la eliminación
+        $payload = $service->exportDeltas();
+        $this->assertNotEmpty($payload['deletions']);
+        $delItem = collect($payload['deletions'])->firstWhere('sync_id', 'PROD-DEL-TEST-001');
+        $this->assertNotNull($delItem);
+
+        // Simular que el otro nodo (VPS) aún tiene el registro
+        BagProduction::create([
+            'bag_shift_id' => $shift->id,
+            'user_id'      => $user->id,
+            'machine_id'   => $machine->id,
+            'product_id'   => $product->id,
+            'quantity'     => 5,
+            'weight'       => 15.0,
+            'sync_id'      => 'PROD-DEL-TEST-001',
+        ]);
+        $this->assertDatabaseHas('bag_productions', ['sync_id' => 'PROD-DEL-TEST-001']);
+
+        // Importar el payload con la eliminación en el otro nodo
+        $service->importDeltas($payload);
+
+        // El registro debe quedar eliminado en el otro nodo
+        $this->assertDatabaseMissing('bag_productions', ['sync_id' => 'PROD-DEL-TEST-001']);
+
+        // Si llega un lote rezagado con ese mismo sync_id, NO debe resucitar
+        $stalePayload = [
+            'productions' => [
+                [
+                    'sync_id'                  => 'PROD-DEL-TEST-001',
+                    'shift_sync_id'            => $shift->sync_id,
+                    'product_sku'              => 'BOL-2030',
+                    'machine_code'             => 'SEL-01',
+                    'user_email'               => $user->email,
+                    'quantity'                 => 5,
+                    'weight'                   => 15.0,
+                    'recorded_at'              => now()->toISOString(),
+                ]
+            ]
+        ];
+        $service->importDeltas($stalePayload);
+        $this->assertDatabaseMissing('bag_productions', ['sync_id' => 'PROD-DEL-TEST-001']);
+    }
+
+    public function test_cost_settings_and_raw_material_audits_are_synchronized()
+    {
+        $service = app(CloudSyncService::class);
+
+        // Modificar costos
+        $settings = \App\Models\BagCostSetting::getSettings();
+        $settings->update([
+            'resin_price_per_kg'  => 2.1500,
+            'shift_fixed_cost'    => 35.0000,
+            'daily_profit_target' => 125.0000,
+        ]);
+
+        // Crear un balance de masa / auditoría de materia prima
+        $audit = \App\Models\RawMaterialAudit::create([
+            'sync_id'                  => 'AUDIT-TEST-001',
+            'audit_date'               => now()->toDateString(),
+            'period_start'             => now()->subDays(7)->toDateString(),
+            'period_end'               => now()->toDateString(),
+            'initial_plant_kg'         => 100.0,
+            'transferred_to_plant_kg'  => 500.0,
+            'final_counted_plant_kg'   => 50.0,
+            'consumed_kg'              => 550.0,
+            'good_production_kg'       => 530.0,
+            'waste_purga_kg'           => 15.0,
+            'variance_kg'              => 5.0,
+            'variance_percentage'      => 0.9,
+            'status'                   => 'approved',
+        ]);
+
+        $payload = $service->exportDeltas();
+        $this->assertNotNull($payload['cost_settings']);
+        $this->assertEquals(2.15, (float)$payload['cost_settings']['resin_price_per_kg']);
+        $this->assertNotEmpty($payload['audits']);
+        $this->assertEquals('AUDIT-TEST-001', $payload['audits'][0]['sync_id']);
+
+        // Simular recepción en otro nodo
+        $settings->update(['resin_price_per_kg' => 1.0000]);
+        \App\Models\RawMaterialAudit::query()->delete();
+
+        $service->importDeltas($payload);
+
+        $this->assertEquals(2.15, (float)\App\Models\BagCostSetting::getSettings()->fresh()->resin_price_per_kg);
+        $this->assertDatabaseHas('raw_material_audits', ['sync_id' => 'AUDIT-TEST-001']);
+    }
 }
 

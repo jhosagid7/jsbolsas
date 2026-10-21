@@ -20,6 +20,9 @@ use App\Models\ProductionFormula;
 use App\Models\FormulaVersion;
 use App\Models\FormulaItem;
 use App\Models\CloudSyncLog;
+use App\Models\BagCostSetting;
+use App\Models\RawMaterialAudit;
+use App\Models\CloudSyncDeletion;
 
 class CloudSyncService
 {
@@ -130,8 +133,11 @@ class CloudSyncService
         $pendingRaw = RawMaterial::where('updated_at', '>', $dateThreshold)->count();
         $pendingFormulas = ProductionFormula::where('updated_at', '>', $dateThreshold)->count();
         $pendingProducts = BagProduct::where('updated_at', '>', $dateThreshold)->count();
+        $pendingAudits = Schema::hasTable('raw_material_audits') ? RawMaterialAudit::where('updated_at', '>', $dateThreshold)->count() : 0;
+        $pendingDeletions = Schema::hasTable('cloud_sync_deletions') ? CloudSyncDeletion::where('updated_at', '>', $dateThreshold)->count() : 0;
+        $pendingCosts = (Schema::hasTable('bag_cost_settings') && BagCostSetting::where('updated_at', '>', $dateThreshold)->exists()) ? 1 : 0;
 
-        return $pendingProds + $pendingShifts + $pendingTransfers + $pendingRaw + $pendingFormulas + $pendingProducts;
+        return $pendingProds + $pendingShifts + $pendingTransfers + $pendingRaw + $pendingFormulas + $pendingProducts + $pendingAudits + $pendingDeletions + $pendingCosts;
     }
 
     /**
@@ -310,6 +316,69 @@ class CloudSyncService
                 ];
             })->toArray();
 
+        // 10. Arqueos y Balances de Masa Semanal de Materia Prima
+        $audits = [];
+        if (Schema::hasTable('raw_material_audits')) {
+            $audits = RawMaterialAudit::with('auditedByUser')
+                ->where('updated_at', '>=', $queryDate)
+                ->get()
+                ->map(function ($a) {
+                    return [
+                        'sync_id'                  => $a->sync_id ?: ('AUDIT-' . $a->id),
+                        'audit_date'               => $a->audit_date ? $a->audit_date->format('Y-m-d') : null,
+                        'period_start'             => $a->period_start ? $a->period_start->format('Y-m-d') : null,
+                        'period_end'               => $a->period_end ? $a->period_end->format('Y-m-d') : null,
+                        'initial_plant_kg'         => (float)$a->initial_plant_kg,
+                        'transferred_to_plant_kg'  => (float)$a->transferred_to_plant_kg,
+                        'final_counted_plant_kg'   => (float)$a->final_counted_plant_kg,
+                        'consumed_kg'              => (float)$a->consumed_kg,
+                        'good_production_kg'       => (float)$a->good_production_kg,
+                        'waste_purga_kg'           => (float)$a->waste_purga_kg,
+                        'variance_kg'              => (float)$a->variance_kg,
+                        'variance_percentage'      => (float)$a->variance_percentage,
+                        'status'                   => $a->status,
+                        'audited_by_email'         => $a->auditedByUser?->email,
+                        'notes'                    => $a->notes,
+                        'updated_at'               => $a->updated_at ? $a->updated_at->toISOString() : null,
+                    ];
+                })->toArray();
+        }
+
+        // 11. Costos Generales de Fábrica y Precio $/kg de Resina
+        $costSettings = null;
+        if (Schema::hasTable('bag_cost_settings')) {
+            $settings = BagCostSetting::getSettings();
+            if ($settings && (!$since || $settings->updated_at >= $queryDate)) {
+                $costSettings = [
+                    'resin_price_per_kg'   => (float)$settings->resin_price_per_kg,
+                    'shift_fixed_cost'     => (float)$settings->shift_fixed_cost,
+                    'daily_profit_target'  => (float)$settings->daily_profit_target,
+                    'margin_40_multiplier' => (float)$settings->margin_40_multiplier,
+                    'margin_45_multiplier' => (float)$settings->margin_45_multiplier,
+                    'margin_50_multiplier' => (float)$settings->margin_50_multiplier,
+                    'margin_60_multiplier' => (float)$settings->margin_60_multiplier,
+                    'tier1_multiplier'     => (float)$settings->tier1_multiplier,
+                    'tier2_multiplier'     => (float)$settings->tier2_multiplier,
+                    'tier3_multiplier'     => (float)$settings->tier3_multiplier,
+                    'updated_at'           => $settings->updated_at ? $settings->updated_at->toISOString() : null,
+                ];
+            }
+        }
+
+        // 12. Registros Eliminados (Tombstones para eliminación sincronizada)
+        $deletions = [];
+        if (Schema::hasTable('cloud_sync_deletions')) {
+            $deletions = CloudSyncDeletion::where('updated_at', '>=', $queryDate)
+                ->get()
+                ->map(function ($d) {
+                    return [
+                        'entity_type' => $d->entity_type,
+                        'sync_id'     => $d->sync_id,
+                        'updated_at'  => $d->updated_at ? $d->updated_at->toISOString() : null,
+                    ];
+                })->toArray();
+        }
+
         return [
             'users'         => $users,
             'machines'      => $machines,
@@ -320,6 +389,9 @@ class CloudSyncService
             'transfers'     => $transfers,
             'formulas'      => $formulas,
             'products'      => $products,
+            'audits'        => $audits,
+            'cost_settings' => $costSettings,
+            'deletions'     => $deletions,
         ];
     }
 
@@ -332,6 +404,27 @@ class CloudSyncService
 
         DB::beginTransaction();
         try {
+            // -1. Procesar eliminaciones primero para limpiar registros eliminados en otros nodos
+            if (!empty($payload['deletions']) && Schema::hasTable('cloud_sync_deletions')) {
+                foreach ($payload['deletions'] as $del) {
+                    $entityType = $del['entity_type'] ?? '';
+                    $syncId = $del['sync_id'] ?? '';
+                    if (empty($syncId)) continue;
+
+                    if ($entityType === 'production') {
+                        BagProduction::where('sync_id', $syncId)->delete();
+                    } elseif ($entityType === 'shift') {
+                        BagShift::where('sync_id', $syncId)->delete();
+                    }
+
+                    CloudSyncDeletion::firstOrCreate([
+                        'entity_type' => $entityType,
+                        'sync_id'     => $syncId,
+                    ]);
+                    $processed++;
+                }
+            }
+
             // 0. Usuarios y Operarios de Fábrica
             if (!empty($payload['users'])) {
                 foreach ($payload['users'] as $uData) {
@@ -493,6 +586,9 @@ class CloudSyncService
             if (!empty($payload['shifts'])) {
                 foreach ($payload['shifts'] as $sData) {
                     if (empty($sData['sync_id'])) continue;
+                    if (Schema::hasTable('cloud_sync_deletions') && CloudSyncDeletion::where('sync_id', $sData['sync_id'])->exists()) {
+                        continue;
+                    }
 
                     BagShift::updateOrCreate(
                         ['sync_id' => $sData['sync_id']],
@@ -516,6 +612,9 @@ class CloudSyncService
             if (!empty($payload['productions'])) {
                 foreach ($payload['productions'] as $pData) {
                     if (empty($pData['sync_id'])) continue;
+                    if (Schema::hasTable('cloud_sync_deletions') && CloudSyncDeletion::where('sync_id', $pData['sync_id'])->exists()) {
+                        continue;
+                    }
 
                     $pShift = !empty($pData['shift_sync_id']) ? BagShift::where('sync_id', $pData['shift_sync_id'])->first() : null;
                     $pForm = !empty($pData['formula_code']) ? ProductionFormula::where('code', $pData['formula_code'])->first() : null;
@@ -577,6 +676,52 @@ class CloudSyncService
                 }
             }
 
+            // 8. Arqueos y Balances de Masa Semanal de Materia Prima
+            if (!empty($payload['audits']) && Schema::hasTable('raw_material_audits')) {
+                foreach ($payload['audits'] as $aData) {
+                    if (empty($aData['sync_id'])) continue;
+                    RawMaterialAudit::updateOrCreate(
+                        ['sync_id' => $aData['sync_id']],
+                        [
+                            'audit_date'              => $aData['audit_date'] ?? now()->toDateString(),
+                            'period_start'            => $aData['period_start'] ?? now()->subDays(7)->toDateString(),
+                            'period_end'              => $aData['period_end'] ?? now()->toDateString(),
+                            'initial_plant_kg'        => (float)($aData['initial_plant_kg'] ?? 0),
+                            'transferred_to_plant_kg' => (float)($aData['transferred_to_plant_kg'] ?? 0),
+                            'final_counted_plant_kg'  => (float)($aData['final_counted_plant_kg'] ?? 0),
+                            'consumed_kg'             => (float)($aData['consumed_kg'] ?? 0),
+                            'good_production_kg'      => (float)($aData['good_production_kg'] ?? 0),
+                            'waste_purga_kg'          => (float)($aData['waste_purga_kg'] ?? 0),
+                            'variance_kg'             => (float)($aData['variance_kg'] ?? 0),
+                            'variance_percentage'     => (float)($aData['variance_percentage'] ?? 0),
+                            'status'                  => $aData['status'] ?? 'approved',
+                            'audited_by'              => !empty($aData['audited_by_email']) ? $this->resolveUserId($aData['audited_by_email']) : null,
+                            'notes'                   => $aData['notes'] ?? null,
+                        ]
+                    );
+                    $processed++;
+                }
+            }
+
+            // 9. Costos Generales de Fábrica y Precio $/kg de Resina
+            if (!empty($payload['cost_settings']) && Schema::hasTable('bag_cost_settings')) {
+                $csData = $payload['cost_settings'];
+                $settings = BagCostSetting::getSettings();
+                $settings->update([
+                    'resin_price_per_kg'   => (float)($csData['resin_price_per_kg'] ?? $settings->resin_price_per_kg),
+                    'shift_fixed_cost'     => (float)($csData['shift_fixed_cost'] ?? $settings->shift_fixed_cost),
+                    'daily_profit_target'  => (float)($csData['daily_profit_target'] ?? $settings->daily_profit_target),
+                    'margin_40_multiplier' => (float)($csData['margin_40_multiplier'] ?? $settings->margin_40_multiplier),
+                    'margin_45_multiplier' => (float)($csData['margin_45_multiplier'] ?? $settings->margin_45_multiplier),
+                    'margin_50_multiplier' => (float)($csData['margin_50_multiplier'] ?? $settings->margin_50_multiplier),
+                    'margin_60_multiplier' => (float)($csData['margin_60_multiplier'] ?? $settings->margin_60_multiplier),
+                    'tier1_multiplier'     => (float)($csData['tier1_multiplier'] ?? $settings->tier1_multiplier),
+                    'tier2_multiplier'     => (float)($csData['tier2_multiplier'] ?? $settings->tier2_multiplier),
+                    'tier3_multiplier'     => (float)($csData['tier3_multiplier'] ?? $settings->tier3_multiplier),
+                ]);
+                $processed++;
+            }
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -601,6 +746,9 @@ class CloudSyncService
             + count($payload['transfers'] ?? [])
             + count($payload['formulas'] ?? [])
             + count($payload['products'] ?? [])
+            + count($payload['audits'] ?? [])
+            + count($payload['deletions'] ?? [])
+            + (!empty($payload['cost_settings']) ? 1 : 0)
             + count($payload['users'] ?? []);
 
         if ($totalItems === 0) {
