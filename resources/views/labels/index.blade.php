@@ -177,21 +177,28 @@
                 </h5>
                 <p class="text-white-50 small mb-2">Seleccione si desea imprimir los paquetes de millar que van dentro del bulto, la etiqueta master exterior o el kit completo.</p>
                 <div class="row g-2">
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-3">
                         <label class="card-template-option w-100 p-2 rounded border border-secondary text-center cursor-pointer">
-                            <input type="radio" name="label_scope" value="millar" checked class="form-check-input mb-1">
-                            <strong class="d-block text-white small">🏷️ Por Millar (Interior)</strong>
-                            <small class="text-white-50 d-block" style="font-size: 11px;">1 Millar por paquete</small>
+                            <input type="radio" name="label_scope" value="single_millar" class="form-check-input mb-1">
+                            <strong class="d-block text-white small">🏷️ Millar Suelto / Reposición</strong>
+                            <small class="text-white-50 d-block" style="font-size: 11px;">1 etiqueta por cantidad exacta</small>
                         </label>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-3">
+                        <label class="card-template-option w-100 p-2 rounded border border-secondary text-center cursor-pointer">
+                            <input type="radio" name="label_scope" value="millar" checked class="form-check-input mb-1">
+                            <strong class="d-block text-white small">📦 Desglose Bulto (Millares)</strong>
+                            <small class="text-white-50 d-block" style="font-size: 11px;">Todos los millares del bulto</small>
+                        </label>
+                    </div>
+                    <div class="col-6 col-md-3">
                         <label class="card-template-option w-100 p-2 rounded border border-secondary text-center cursor-pointer">
                             <input type="radio" name="label_scope" value="bulto" class="form-check-input mb-1">
                             <strong class="d-block text-white small">📦 Bulto Master</strong>
                             <small class="text-white-50 d-block" style="font-size: 11px;">1 Etiqueta Exterior</small>
                         </label>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-3">
                         <label class="card-template-option w-100 p-2 rounded border border-secondary text-center cursor-pointer">
                             <input type="radio" name="label_scope" value="kit" class="form-check-input mb-1">
                             <strong class="d-block text-white small">📑 Kit Completo</strong>
@@ -207,21 +214,28 @@
                     <i class="bi bi-sliders text-info me-2"></i> Formato y Diseño de Salida
                 </h5>
                 <div class="row g-2">
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-3">
                         <label class="card-template-option w-100 p-3 rounded border border-secondary text-center cursor-pointer">
-                            <input type="radio" name="template" value="80mm" checked class="form-check-input mb-2">
-                            <strong class="d-block text-white">Rollo 80mm</strong>
-                            <small class="text-white-50 d-block">Grande (Zebra / POS-80)</small>
+                            <input type="radio" name="template" value="60x30mm" checked class="form-check-input mb-2">
+                            <strong class="d-block text-white">Etiquetas 60x30 mm</strong>
+                            <small class="text-white-50 d-block">Xprinter / Adhesiva</small>
                         </label>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-3">
+                        <label class="card-template-option w-100 p-3 rounded border border-secondary text-center cursor-pointer">
+                            <input type="radio" name="template" value="80mm" class="form-check-input mb-2">
+                            <strong class="d-block text-white">Rollo 80mm</strong>
+                            <small class="text-white-50 d-block">Térmica (POS-80)</small>
+                        </label>
+                    </div>
+                    <div class="col-6 col-md-3">
                         <label class="card-template-option w-100 p-3 rounded border border-secondary text-center cursor-pointer">
                             <input type="radio" name="template" value="58mm" class="form-check-input mb-2">
                             <strong class="d-block text-white">Rollo 58mm</strong>
-                            <small class="text-white-50 d-block">Mini / Portátil Bluetooth</small>
+                            <small class="text-white-50 d-block">Mini / Portátil</small>
                         </label>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-6 col-md-3">
                         <label class="card-template-option w-100 p-3 rounded border border-secondary text-center cursor-pointer">
                             <input type="radio" name="template" value="sheet" class="form-check-input mb-2">
                             <strong class="d-block text-white">Hoja Carta 3x6</strong>
@@ -238,7 +252,7 @@
                 </h5>
                 <p class="text-white-50 small mb-3">Si imprime desde el catálogo genérico, puede personalizar el operario que lo fabricó, la fecha y el lote.</p>
                 <div class="row g-2">
-                    <div class="col-md-5">
+                    <div class="col-md-4">
                         <label class="form-label text-white-50 small mb-1 fw-bold">Operario Responsable</label>
                         <select name="operator_id" class="form-select form-select-sm bg-dark border-secondary text-white">
                             <option value="">👤 {{ Auth::user()->name ?? 'Planta M&F' }} (Actual)</option>
@@ -247,13 +261,17 @@
                             @endforeach
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label text-white-50 small mb-1 fw-bold">Fecha de Producción</label>
                         <input type="date" name="production_date" value="{{ date('Y-m-d') }}" class="form-control form-control-sm bg-dark border-secondary text-white">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label text-white-50 small mb-1 fw-bold">Código de Lote</label>
                         <input type="text" name="batch_code" placeholder="LOTE-01" class="form-control form-control-sm bg-dark border-secondary text-white">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-white-50 small mb-1 fw-bold">⚖️ Peso Real (Kg)</label>
+                        <input type="number" step="0.01" min="0" name="custom_weight" placeholder="Opcional (ej: 4.50)" class="form-control form-control-sm bg-dark border-secondary text-white" title="Si se ingresa un peso, el sistema calcula si es Grado A (Sobrepeso), Grado B (Óptimo) o Grado C (Subcalibre)">
                     </div>
                 </div>
             </div>

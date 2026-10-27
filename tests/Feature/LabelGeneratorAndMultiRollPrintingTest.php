@@ -142,6 +142,7 @@ class LabelGeneratorAndMultiRollPrintingTest extends TestCase
         $response->assertSee('Generador de Etiquetas');
         $response->assertSee('Bobina de Zanahoria 1Kg');
         $response->assertSee('Bolsa Asa 30x40');
+        $response->assertSee('Etiquetas 60x30 mm');
         $response->assertSee('Rollo 80mm');
         $response->assertSee('Rollo 58mm');
         $response->assertSee('Hoja Carta 3x6');
@@ -240,5 +241,106 @@ class LabelGeneratorAndMultiRollPrintingTest extends TestCase
         $response->assertSee('LOTE-TURNO-MAÑANA');
         // No debe mostrar peso porque es bulto homogéneo
         $response->assertDontSee('Peso Real:');
+    }
+
+    /**
+     * Test 7: La vista de ticket y descarga PDF soportan tanto Impresora Térmica como Impresora de Etiquetas (60x30mm).
+     */
+    public function test_ticket_view_and_pdf_support_label_printer_60x30mm(): void
+    {
+        $prod = BagProduction::create([
+            'bag_shift_id' => $this->shift->id,
+            'user_id'      => $this->operator->id,
+            'product_id'   => $this->bultoProduct->id,
+            'quantity'     => 1,
+            'weight'       => 25.00,
+            'status'       => 'approved',
+            'reviewed_by'  => $this->supervisor->id,
+            'reviewed_at'  => now(),
+            'recorded_at'  => now(),
+            'qr_code'      => 'PKG-LABEL-60X30',
+        ]);
+
+        $response = $this->actingAs($this->supervisor)
+            ->get(route('ticket', ['id' => $prod->id, 'size' => '60x30mm']));
+
+        $response->assertStatus(200);
+        $response->assertSee('Impresora de Etiquetas (60x30 mm)');
+        $response->assertSee('Impresora Térmica (80mm)');
+        $response->assertSee('Impresora Térmica (58mm)');
+        $response->assertSee('size-60x30mm');
+
+        $pdfResponse = $this->actingAs($this->supervisor)
+            ->get(route('ticket.pdf', ['id' => $prod->id, 'size' => '60x30mm']));
+
+        $pdfResponse->assertStatus(200);
+        $this->assertEquals('application/pdf', $pdfResponse->headers->get('content-type'));
+    }
+
+    /**
+     * Test 8: Modo Millar Suelto / Reposición genera la cantidad exacta solicitada (sin multiplicar por millares de bulto).
+     */
+    public function test_label_generator_single_millar_reposicion_generates_exact_quantity(): void
+    {
+        // $this->bultoProduct tiene 20 millares por bulto normalmente
+        $payload = [
+            'items' => [
+                [
+                    'type' => 'catalog',
+                    'id'   => $this->bultoProduct->id,
+                    'qty'  => 2, // Solicita 2 etiquetas sueltas para reponer
+                ],
+            ],
+            'label_scope'     => 'single_millar',
+            'production_date' => '2026-10-22',
+            'batch_code'      => 'LOTE-REPOSICION',
+            'template'        => '60x30mm',
+            'output'          => 'preview',
+        ];
+
+        $response = $this->actingAs($this->supervisor)
+            ->post(route('labels.generate'), $payload);
+
+        $response->assertStatus(200);
+        // Debe generar exactamente 2 etiquetas, no 40
+        $response->assertSee('Total de etiquetas físicas a imprimir: <strong>2</strong>', false);
+        $response->assertSee('MODO: MILLAR SUELTO / REPOSICIÓN');
+        $response->assertSee('1 MILLAR');
+    }
+
+    /**
+     * Test 9: Ingreso de peso real opcional calcula automáticamente el grado de calidad (A/B/C) y lo muestra en la etiqueta.
+     */
+    public function test_label_generator_with_custom_weight_calculates_quality_grade_and_shows_on_label(): void
+    {
+        $payload = [
+            'items' => [
+                [
+                    'type' => 'catalog',
+                    'id'   => $this->bultoProduct->id,
+                    'qty'  => 1,
+                ],
+            ],
+            'label_scope'     => 'single_millar',
+            'custom_weight'   => 12.50,
+            'production_date' => '2026-10-22',
+            'batch_code'      => 'LOTE-PESO-MANUAL',
+            'template'        => '60x30mm',
+            'output'          => 'preview',
+        ];
+
+        $response = $this->actingAs($this->supervisor)
+            ->post(route('labels.generate'), $payload);
+
+        $response->assertStatus(200);
+        $response->assertSee('Total de etiquetas físicas a imprimir: <strong>1</strong>', false);
+        $response->assertSee('12.50 Kg');
+        // Debe haber añadido el sufijo del grado calculado (-A, -B o -C) al código de lote
+        $content = $response->getContent();
+        $this->assertTrue(
+            str_contains($content, 'LOTE-PESO-MANUAL-A') ||
+            str_contains($content, 'LOTE-PESO-MANUAL-B') ||
+            str_contains($content, 'LOTE-PESO-MANUAL-C')
+        );
     }
 }

@@ -454,5 +454,81 @@ class CloudSyncBidirectionalTest extends TestCase
         $this->assertEquals(2.15, (float)\App\Models\BagCostSetting::getSettings()->fresh()->resin_price_per_kg);
         $this->assertDatabaseHas('raw_material_audits', ['sync_id' => 'AUDIT-TEST-001']);
     }
+
+    public function test_user_password_and_status_sync_to_existing_user()
+    {
+        $service = app(CloudSyncService::class);
+
+        // 1. Crear usuario base
+        $user = User::create([
+            'name'     => 'Operario Original',
+            'email'    => 'operario.sync@test.com',
+            'password' => bcrypt('password_antiguo'),
+            'role'     => 'operario',
+            'status'   => 'Active',
+            'weekly_salary' => 80.00,
+        ]);
+
+        $newPasswordHash = bcrypt('password_nuevo_2026');
+
+        // 2. Simular payload de actualización que viene del VPS
+        $payload = [
+            'users' => [
+                [
+                    'name'                 => 'Operario Modificado',
+                    'email'                => 'operario.sync@test.com',
+                    'password'             => $newPasswordHash,
+                    'role'                 => 'supervisor',
+                    'status'               => 'Active',
+                    'weekly_salary'        => 120.00,
+                    'work_days_per_week'   => 5,
+                    'pay_partial_packages' => true,
+                ]
+            ]
+        ];
+
+        $service->importDeltas($payload);
+
+        $user->refresh();
+        $this->assertEquals('Operario Modificado', $user->name);
+        $this->assertEquals($newPasswordHash, $user->password);
+        $this->assertEquals('supervisor', $user->role);
+        $this->assertEquals(120.00, (float)$user->weekly_salary);
+        $this->assertTrue((bool)$user->pay_partial_packages);
+    }
+
+    public function test_cloud_sync_manual_endpoint_forces_full_sync()
+    {
+        $user = User::create([
+            'name'     => 'Admin Test',
+            'email'    => 'admin@sync.test',
+            'password' => bcrypt('secret123'),
+            'role'     => 'superadmin',
+        ]);
+
+        $this->actingAs($user);
+
+        Http::fake([
+            'https://bolsas.plasticosmyf.com/api/cloud-sync/handshake' => Http::response([
+                'success' => true,
+                'node_role' => 'cloud',
+                'server_time' => now()->toISOString(),
+                'app_version' => '2.3.2',
+            ], 200),
+            'https://bolsas.plasticosmyf.com/api/cloud-sync/pull' => Http::response([
+                'success' => true,
+                'payload' => [
+                    'users' => [],
+                    'products' => [],
+                    'raw_materials' => [],
+                ],
+                'server_time' => now()->toISOString(),
+            ], 200),
+        ]);
+
+        $response = $this->postJson(route('cloud_sync.manual'));
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+    }
 }
 

@@ -20,13 +20,13 @@
 
         .ticket-page {
             page-break-after: always;
-            padding: {{ ($size ?? '80mm') === '58mm' ? '1.5mm' : '2mm' }};
+            padding: {{ ($size ?? '80mm') === '60x30mm' ? '0.8mm' : (($size ?? '80mm') === '58mm' ? '1.5mm' : '2mm') }};
             width: 100%;
         }
 
         .ticket-container {
-            border: 2px solid #000000;
-            padding: {{ ($size ?? '80mm') === '58mm' ? '1.5mm 2mm' : '2.5mm 3.5mm' }};
+            border: {{ ($size ?? '80mm') === '60x30mm' ? '1.5px solid #000000' : '2px solid #000000' }};
+            padding: {{ ($size ?? '80mm') === '60x30mm' ? '1mm 1.5mm' : (($size ?? '80mm') === '58mm' ? '1.5mm 2mm' : '2.5mm 3.5mm') }};
             background: #ffffff;
             position: relative;
         }
@@ -34,9 +34,9 @@
         .ticket-header {
             text-align: center;
             font-weight: 900;
-            font-size: {{ ($size ?? '80mm') === '58mm' ? '8pt' : '10.5pt' }};
+            font-size: {{ ($size ?? '80mm') === '60x30mm' ? '7.5pt' : (($size ?? '80mm') === '58mm' ? '8pt' : '10.5pt') }};
             text-transform: uppercase;
-            border-bottom: 2px solid #000000;
+            border-bottom: {{ ($size ?? '80mm') === '60x30mm' ? '1.5px solid #000000' : '2px solid #000000' }};
             padding-bottom: 2px;
             margin-bottom: 3px;
             line-height: 1.15;
@@ -44,7 +44,7 @@
         }
 
         .ticket-presentation {
-            font-size: {{ ($size ?? '80mm') === '58mm' ? '6.5pt' : '8pt' }};
+            font-size: {{ ($size ?? '80mm') === '60x30mm' ? '6pt' : (($size ?? '80mm') === '58mm' ? '6.5pt' : '8pt') }};
             display: block;
             margin-top: 1px;
             font-weight: 800;
@@ -58,14 +58,14 @@
 
         td.ticket-info {
             vertical-align: middle;
-            width: {{ ($size ?? '80mm') === '58mm' ? '58%' : '62%' }};
-            font-size: {{ ($size ?? '80mm') === '58mm' ? '6.5pt' : '8.5pt' }};
+            width: {{ ($size ?? '80mm') === '60x30mm' ? '62%' : (($size ?? '80mm') === '58mm' ? '58%' : '62%') }};
+            font-size: {{ ($size ?? '80mm') === '60x30mm' ? '6pt' : (($size ?? '80mm') === '58mm' ? '6.5pt' : '8.5pt') }};
             line-height: 1.25;
             word-break: break-word;
         }
 
         td.ticket-info p {
-            margin: 2px 0;
+            margin: 1.5px 0;
             white-space: nowrap;
         }
 
@@ -74,32 +74,30 @@
             color: #000000;
         }
 
-
-
         td.ticket-qr {
             vertical-align: middle;
             text-align: center;
-            width: {{ ($size ?? '80mm') === '58mm' ? '42%' : '38%' }};
+            width: {{ ($size ?? '80mm') === '60x30mm' ? '38%' : (($size ?? '80mm') === '58mm' ? '42%' : '38%') }};
         }
 
         img.qr-img {
             display: block;
             margin: 0 auto;
-            width: {{ ($size ?? '80mm') === '58mm' ? '15mm' : '22mm' }};
-            height: {{ ($size ?? '80mm') === '58mm' ? '15mm' : '22mm' }};
+            width: {{ ($size ?? '80mm') === '60x30mm' ? '14mm' : (($size ?? '80mm') === '58mm' ? '15mm' : '22mm') }};
+            height: {{ ($size ?? '80mm') === '60x30mm' ? '14mm' : (($size ?? '80mm') === '58mm' ? '15mm' : '22mm') }};
         }
 
         .ticket-sku {
-            font-size: {{ ($size ?? '80mm') === '58mm' ? '6pt' : '8pt' }};
+            font-size: {{ ($size ?? '80mm') === '60x30mm' ? '5.5pt' : (($size ?? '80mm') === '58mm' ? '6pt' : '8pt') }};
             font-family: 'Courier New', Courier, monospace;
             font-weight: 900;
-            margin-top: 2px;
+            margin-top: 1px;
             text-align: center;
             letter-spacing: 0.3px;
         }
 
         .ticket-qr-code {
-            font-size: {{ ($size ?? '80mm') === '58mm' ? '5pt' : '7pt' }};
+            font-size: {{ ($size ?? '80mm') === '60x30mm' ? '5pt' : (($size ?? '80mm') === '58mm' ? '5pt' : '7pt') }};
             font-family: monospace;
             font-weight: 900;
             text-align: center;

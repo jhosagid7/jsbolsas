@@ -1600,8 +1600,9 @@ class BagFactoryWebController extends Controller
         }
 
         $labels = $this->formatLabelsList($prod, $scope);
+        $size = $request->get('size');
         $pdfUrl = route('ticket.pdf', ['id' => $id, 'scope' => $scope]);
-        return view('bag_factory.ticket', compact('labels', 'pdfUrl', 'scope', 'prod', 'isComposite', 'canKit', 'canBulto', 'canMillar'));
+        return view('bag_factory.ticket', compact('labels', 'pdfUrl', 'scope', 'prod', 'isComposite', 'canKit', 'canBulto', 'canMillar', 'size'));
     }
 
     public function ticketPdf($id, Request $request)
@@ -2231,6 +2232,13 @@ class BagFactoryWebController extends Controller
         if ($size === 'sheet') {
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.labels_sheet_qr', compact('labels'));
             $pdf->setPaper('letter', 'portrait');
+        } elseif ($size === '60x30mm') {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('bag_factory.ticket_pdf', [
+                'labels' => $labels,
+                'size'   => '60x30mm',
+            ]);
+            // Ancho 60mm (aprox 170.1pt), alto 30mm por ticket (aprox 85.0pt)
+            $pdf->setPaper([0, 0, 170.1, 85.0 * max(1, count($labels))], 'portrait');
         } elseif ($size === '58mm') {
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('bag_factory.ticket_pdf', [
                 'labels' => $labels,
@@ -3225,10 +3233,12 @@ class BagFactoryWebController extends Controller
 
     /**
      * Dispara una sincronización manual a demanda desde la interfaz de usuario
+     * Nota: En sincronizaciones manuales forzamos la descarga completa para garantizar
+     * que usuarios, contraseñas, catálogo y fórmulas queden 100% actualizados sin sesgos de hora.
      */
     public function cloudSyncManual(Request $request, CloudSyncService $syncService)
     {
-        $force = $request->boolean('force') || \App\Models\RawMaterial::count() === 0 || \App\Models\BagProduct::count() === 0;
+        $force = true;
         $result = $syncService->syncAll($force);
         return response()->json($result);
     }

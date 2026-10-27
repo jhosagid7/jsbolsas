@@ -4,14 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Impresión de Etiquetas de Producción - JSBolsas Pro</title>
-    <style id="dynamic-page-style">
-        @media print {
-            @page {
-                margin: 0;
-                size: portrait;
-            }
+    @php
+        $initSize = $size ?? request('size', '80mm');
+        if (!in_array($initSize, ['60x30mm', '80mm', '58mm'])) {
+            $initSize = '80mm';
         }
-    </style>
+    @endphp
     <style>
         /* ===================================================
            ESTILOS GENERALES Y SIMULADOR EN PANTALLA
@@ -415,12 +413,99 @@
         }
 
         /* ===================================================
+           TAMAÑO FORMATO IMPRESORA DE ETIQUETAS (60x30 mm)
+           =================================================== */
+        .size-60x30mm {
+            width: 55mm;
+            min-height: 26.5mm;
+            max-height: 27.5mm;
+            padding: 0.8mm 1.5mm;
+            border-width: 1.5px;
+            overflow: hidden;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .size-60x30mm .ticket-header {
+            margin-bottom: 2px;
+            padding-bottom: 1px;
+            border-bottom: 1.5px solid #000000;
+        }
+
+        .size-60x30mm .product-title {
+            font-size: 8pt;
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .size-60x30mm .ticket-presentation {
+            font-size: 6.5pt;
+            line-height: 1;
+            margin-top: 1px;
+        }
+
+        .size-60x30mm .ticket-info-td {
+            width: 62%;
+            vertical-align: top;
+            padding-right: 2px;
+        }
+
+        .size-60x30mm .info-row {
+            font-size: 6.2pt;
+            margin: 0.5px 0;
+            line-height: 1.15;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .size-60x30mm .info-label {
+            font-weight: 900;
+            font-size: 6pt;
+        }
+
+        .size-60x30mm .info-val {
+            font-weight: 700;
+            font-size: 6.2pt;
+        }
+
+        .size-60x30mm .info-weight-val {
+            font-size: 7.2pt;
+            font-weight: 900;
+        }
+
+        .size-60x30mm .ticket-qr-td {
+            width: 38%;
+            vertical-align: middle;
+            text-align: center;
+        }
+
+        .size-60x30mm .qr-img {
+            width: 14mm !important;
+            height: 14mm !important;
+        }
+
+        .size-60x30mm .ticket-sku {
+            font-size: 5.5pt;
+            letter-spacing: 0.2px;
+            margin-top: 1px;
+            line-height: 1;
+        }
+
+        .size-60x30mm .ticket-qr-code {
+            font-size: 5pt;
+            letter-spacing: 0px;
+            line-height: 1;
+        }
+
+        /* ===================================================
            REGLAS EXACTAS DE IMPRESIÓN DIRECTA (@media print)
            =================================================== */
         @media print {
             @page {
                 margin: 0mm !important;
-                size: portrait;
             }
 
             html, body {
@@ -455,6 +540,8 @@
                 box-shadow: none !important;
                 border: 2px solid #000000 !important;
                 margin: 0 auto !important;
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 page-break-after: always !important;
@@ -471,7 +558,7 @@
             .size-80mm {
                 width: 76mm !important;
                 max-width: 76mm !important;
-                padding: 1mm 2.5mm !important;
+                padding: 0.5mm 2.5mm !important;
                 margin-left: auto !important;
                 margin-right: auto !important;
             }
@@ -482,6 +569,32 @@
                 padding: 0.8mm 2mm !important;
                 margin-left: auto !important;
                 margin-right: auto !important;
+            }
+
+            .size-60x30mm {
+                width: 54mm !important;
+                max-width: 54mm !important;
+                height: 26.5mm !important;
+                max-height: 27mm !important;
+                padding: 0.8mm 1.5mm !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+                overflow: hidden !important;
+                border: 1.5px solid #000000 !important;
+                border-radius: 4px !important;
+                box-sizing: border-box !important;
+            }
+        }
+    </style>
+    <style id="dynamic-page-style">
+        @media print {
+            @page {
+                margin: 0mm !important;
+                @if($initSize === '60x30mm')
+                    size: 60mm 30mm !important;
+                @else
+                    size: portrait !important;
+                @endif
             }
         }
     </style>
@@ -496,7 +609,7 @@
                 Total de etiquetas físicas a imprimir: <strong>{{ count($labels) }}</strong>
                 @if(isset($scope))
                     <span class="badge" style="background:#0284c7; color:#fff; font-size:12px; margin-left:6px; padding:3px 10px; border-radius:6px; font-weight:700;">
-                        MODO: {{ strtoupper($scope === 'kit' ? 'KIT COMPLETO' : ($scope === 'bulto' ? 'SOLO BULTO MASTER' : 'SOLO MILLARES')) }}
+                        MODO: {{ strtoupper($scope === 'kit' ? 'KIT COMPLETO' : ($scope === 'bulto' ? 'SOLO BULTO MASTER' : ($scope === 'single_millar' ? 'MILLAR SUELTO / REPOSICIÓN' : 'SOLO MILLARES'))) }}
                     </span>
                 @endif
             </p>
@@ -523,15 +636,18 @@
             </div>
         </div>
 
-        <!-- Fila 2: Formato de Papel Térmico -->
+        <!-- Fila 2: Formato de Papel / Dispositivo de Impresión -->
         <div class="controls-group">
-            <span class="controls-group-label">🖨️ Ancho de Papel:</span>
+            <span class="controls-group-label">🖨️ Dispositivo de Impresión:</span>
             <div class="controls-group-options">
-                <button type="button" class="btn-size active" id="btn-80mm" onclick="changePaperSize('80mm')">
-                    <span>📄</span> Rollo 80mm (Estándar / Industrial)
+                <button type="button" class="btn-size {{ $initSize === '60x30mm' ? 'active' : '' }}" id="btn-60x30mm" onclick="changePaperSize('60x30mm')">
+                    <span>🏷️</span> Impresora de Etiquetas (60x30 mm)
                 </button>
-                <button type="button" class="btn-size" id="btn-58mm" onclick="changePaperSize('58mm')">
-                    <span>🧾</span> Rollo 58mm (Portátil / Mini)
+                <button type="button" class="btn-size {{ $initSize === '80mm' ? 'active' : '' }}" id="btn-80mm" onclick="changePaperSize('80mm')">
+                    <span>🧾</span> Impresora Térmica (80mm)
+                </button>
+                <button type="button" class="btn-size {{ $initSize === '58mm' ? 'active' : '' }}" id="btn-58mm" onclick="changePaperSize('58mm')">
+                    <span>🧾</span> Impresora Térmica (58mm)
                 </button>
             </div>
         </div>
@@ -567,7 +683,7 @@
     <!-- Contenedor de Etiquetas Individuales -->
     <div class="ticket-wrapper">
         @forelse($labels as $label)
-            <div class="ticket-container size-80mm" id="ticket-{{ $loop->index }}">
+            <div class="ticket-container size-{{ $initSize }}" id="ticket-{{ $loop->index }}">
                 
                 <!-- Watermark Logo (Solo en Pantalla) -->
                 @if(file_exists(public_path('images/logo_watermark.png')))
@@ -692,30 +808,43 @@
             const tickets = document.querySelectorAll('.ticket-container');
             const btn80 = document.getElementById('btn-80mm');
             const btn58 = document.getElementById('btn-58mm');
+            const btn60 = document.getElementById('btn-60x30mm');
             const dynamicPageStyle = document.getElementById('dynamic-page-style');
 
-            if (size === '80mm') {
-                tickets.forEach(t => {
-                    t.classList.remove('size-58mm');
-                    t.classList.add('size-80mm');
-                });
-                btn80.classList.add('active');
-                btn58.classList.remove('active');
-                if (dynamicPageStyle) {
-                    dynamicPageStyle.innerHTML = '@media print { @page { margin: 0; size: portrait; } }';
-                }
-            } else {
-                tickets.forEach(t => {
-                    t.classList.remove('size-80mm');
-                    t.classList.add('size-58mm');
-                });
-                btn58.classList.add('active');
-                btn80.classList.remove('active');
-                if (dynamicPageStyle) {
-                    dynamicPageStyle.innerHTML = '@media print { @page { margin: 0; size: portrait; } }';
+            tickets.forEach(t => {
+                t.classList.remove('size-80mm', 'size-58mm', 'size-60x30mm');
+                t.classList.add('size-' + size);
+            });
+
+            if (btn80) btn80.classList.toggle('active', size === '80mm');
+            if (btn58) btn58.classList.toggle('active', size === '58mm');
+            if (btn60) btn60.classList.toggle('active', size === '60x30mm');
+
+            if (dynamicPageStyle) {
+                if (size === '60x30mm') {
+                    dynamicPageStyle.innerHTML = '@media print { @page { size: 60mm 30mm !important; margin: 0mm !important; } }';
+                } else {
+                    dynamicPageStyle.innerHTML = '@media print { @page { margin: 0 !important; size: portrait !important; } }';
                 }
             }
         }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            try {
+                localStorage.removeItem('jsbolsas_printer_choice');
+            } catch(e) {}
+
+            let initialSize = '{{ $initSize }}';
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('size')) {
+                const pSize = urlParams.get('size');
+                if (['80mm', '58mm', '60x30mm'].includes(pSize)) {
+                    initialSize = pSize;
+                }
+            }
+
+            changePaperSize(initialSize);
+        });
 
         function downloadPdf() {
             @if(isset($pdfUrl) && !empty($pdfUrl))

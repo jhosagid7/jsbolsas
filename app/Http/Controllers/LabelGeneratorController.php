@@ -66,6 +66,9 @@ class LabelGeneratorController extends Controller
             : 'LOTE-CATALOGO';
 
         $catalogOperatorName = $defaultOperatorName ?: (Auth::user()->name ?? 'Planta M&F');
+        $customWeight = $request->filled('custom_weight') && (float)$request->input('custom_weight') > 0 
+            ? round((float)$request->input('custom_weight'), 2) 
+            : null;
 
         $labels = [];
 
@@ -78,10 +81,24 @@ class LabelGeneratorController extends Controller
                 $prod = BagProduction::with(['product', 'user', 'shift.user', 'reviewer'])->find($id);
                 if ($prod) {
                     $controller = new BagFactoryWebController();
-                    $unitLabels = $controller->formatLabelsList($prod, $scope);
-                    for ($k = 0; $k < $qty; $k++) {
-                        foreach ($unitLabels as $lbl) {
-                            $labels[] = $lbl;
+                    if ($scope === 'single_millar') {
+                        $unitLabels = $controller->formatLabelsList($prod, 'millar');
+                        $baseLbl = !empty($unitLabels) ? $unitLabels[0] : null;
+                        if ($baseLbl) {
+                            for ($k = 0; $k < $qty; $k++) {
+                                $lbl = $baseLbl;
+                                $lbl['index'] = $k + 1;
+                                $lbl['total_in_batch'] = $qty;
+                                $lbl['qr_code'] = $prod->qr_code ? ($prod->qr_code . '-M' . ($k + 1) . '-' . strtoupper(Str::random(3))) : ('PKG-M-' . strtoupper(Str::random(8)));
+                                $labels[] = $lbl;
+                            }
+                        }
+                    } else {
+                        $unitLabels = $controller->formatLabelsList($prod, $scope);
+                        for ($k = 0; $k < $qty; $k++) {
+                            foreach ($unitLabels as $lbl) {
+                                $labels[] = $lbl;
+                            }
                         }
                     }
                 }
@@ -311,11 +328,70 @@ class LabelGeneratorController extends Controller
                                 ];
                             }
                         }
-                    } else {
-                        // Modo Millar por Defecto
+                    } elseif ($scope === 'single_millar') {
+                        // Modo Millar Individual / Reposición (Exactamente $qty etiquetas)
                         $siblingMillar = $product->findSiblingMillarProduct();
+                        $targetProduct = $siblingMillar ?: $product;
                         $effectiveName = ($product->hasBultoPackaging() && $siblingMillar) ? mb_strtoupper($siblingMillar->name, 'UTF-8') : $prodName;
                         $effectiveSku = ($product->hasBultoPackaging() && $siblingMillar) ? ($siblingMillar->sku ?? $sku) : $sku;
+
+                        $effectiveBatchCode = $batchCode;
+                        $isVariableWeight = false;
+                        $effectiveWeight = 0.0;
+
+                        if (!empty($customWeight)) {
+                            $isVariableWeight = true;
+                            $effectiveWeight = $customWeight;
+                            $grading = $targetProduct->calculateWeightQualityGrade($customWeight, 1, 0);
+                            $calcGrade = $grading['grade'];
+                            if (!preg_match('/-[ABC]$/i', $effectiveBatchCode)) {
+                                $effectiveBatchCode .= "-{$calcGrade}";
+                            } else {
+                                $effectiveBatchCode = preg_replace('/-[ABC]$/i', "-{$calcGrade}", $effectiveBatchCode);
+                            }
+                        }
+
+                        for ($m = 1; $m <= $qty; $m++) {
+                            $qr = $product->sku ? 'PKG-' . $product->sku . '-M' . $m . '-' . strtoupper(Str::random(4)) : ('PKG-M-' . strtoupper(Str::random(8)));
+                            $labels[] = [
+                                'id'                => $product->id,
+                                'index'             => $m,
+                                'total_in_batch'    => $qty,
+                                'product_name'      => $effectiveName,
+                                'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
+                                'operator_name'     => $catalogOperatorName,
+                                'production_date'   => $productionDate,
+                                'approver_name'     => Auth::user()->name ?? 'Supervisor',
+                                'is_variable'       => $isVariableWeight,
+                                'weight_kg'         => $effectiveWeight,
+                                'batch_code'        => $effectiveBatchCode,
+                                'qr_code'           => $qr,
+                                'sku'               => $effectiveSku,
+                                'label_type'        => 'millar',
+                            ];
+                        }
+                    } else {
+                        // Modo Millar por Defecto (Desglose Bulto Completo)
+                        $siblingMillar = $product->findSiblingMillarProduct();
+                        $targetProduct = $siblingMillar ?: $product;
+                        $effectiveName = ($product->hasBultoPackaging() && $siblingMillar) ? mb_strtoupper($siblingMillar->name, 'UTF-8') : $prodName;
+                        $effectiveSku = ($product->hasBultoPackaging() && $siblingMillar) ? ($siblingMillar->sku ?? $sku) : $sku;
+
+                        $effectiveBatchCode = $batchCode;
+                        $isVariableWeight = false;
+                        $effectiveWeight = 0.0;
+
+                        if (!empty($customWeight)) {
+                            $isVariableWeight = true;
+                            $effectiveWeight = $customWeight;
+                            $grading = $targetProduct->calculateWeightQualityGrade($customWeight, 1, 0);
+                            $calcGrade = $grading['grade'];
+                            if (!preg_match('/-[ABC]$/i', $effectiveBatchCode)) {
+                                $effectiveBatchCode .= "-{$calcGrade}";
+                            } else {
+                                $effectiveBatchCode = preg_replace('/-[ABC]$/i', "-{$calcGrade}", $effectiveBatchCode);
+                            }
+                        }
 
                         $millarCount = ($millarPerBulto > 1) ? (int)$millarPerBulto : 1;
                         $totalMillares = $qty * $millarCount;
@@ -334,9 +410,9 @@ class LabelGeneratorController extends Controller
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
-                                    'is_variable'       => false,
-                                    'weight_kg'         => 0.0,
-                                    'batch_code'        => $batchCode,
+                                    'is_variable'       => $isVariableWeight,
+                                    'weight_kg'         => $effectiveWeight,
+                                    'batch_code'        => $effectiveBatchCode,
                                     'qr_code'           => $qr,
                                     'sku'               => $effectiveSku,
                                     'label_type'        => 'millar',
@@ -379,10 +455,12 @@ class LabelGeneratorController extends Controller
                 'operator_name'   => $defaultOperatorName,
                 'production_date' => $request->input('production_date'),
                 'batch_code'      => $batchCode,
+                'custom_weight'   => $customWeight,
             ])),
         ]);
 
-        return view('bag_factory.ticket', compact('labels', 'pdfUrl', 'scope'));
+        $size = in_array($template, ['60x30mm', '58mm', '80mm']) ? $template : '80mm';
+        return view('bag_factory.ticket', compact('labels', 'pdfUrl', 'scope', 'size'));
     }
 
     public function confirmPrint(Request $request)
@@ -441,6 +519,7 @@ class LabelGeneratorController extends Controller
             : date('d/m/Y');
         $batchCode = !empty($decoded['batch_code']) ? $decoded['batch_code'] : 'LOTE-CATALOGO';
         $catalogOperatorName = $operatorName ?: (Auth::user()->name ?? 'Planta M&F');
+        $customWeight = !empty($decoded['custom_weight']) ? (float)$decoded['custom_weight'] : null;
 
         $labels = [];
         foreach ($items as $item) {
@@ -452,10 +531,24 @@ class LabelGeneratorController extends Controller
                 $prod = BagProduction::with(['product', 'user', 'shift.user', 'reviewer'])->find($id);
                 if ($prod) {
                     $controller = new BagFactoryWebController();
-                    $unitLabels = $controller->formatLabelsList($prod, $scope);
-                    for ($k = 0; $k < $qty; $k++) {
-                        foreach ($unitLabels as $lbl) {
-                            $labels[] = $lbl;
+                    if ($scope === 'single_millar') {
+                        $unitLabels = $controller->formatLabelsList($prod, 'millar');
+                        $baseLbl = !empty($unitLabels) ? $unitLabels[0] : null;
+                        if ($baseLbl) {
+                            for ($k = 0; $k < $qty; $k++) {
+                                $lbl = $baseLbl;
+                                $lbl['index'] = $k + 1;
+                                $lbl['total_in_batch'] = $qty;
+                                $lbl['qr_code'] = $prod->qr_code ? ($prod->qr_code . '-M' . ($k + 1) . '-' . strtoupper(Str::random(3))) : ('PKG-M-' . strtoupper(Str::random(8)));
+                                $labels[] = $lbl;
+                            }
+                        }
+                    } else {
+                        $unitLabels = $controller->formatLabelsList($prod, $scope);
+                        for ($k = 0; $k < $qty; $k++) {
+                            foreach ($unitLabels as $lbl) {
+                                $labels[] = $lbl;
+                            }
                         }
                     }
                 }
@@ -685,11 +778,70 @@ class LabelGeneratorController extends Controller
                                 ];
                             }
                         }
-                    } else {
-                        // Modo Millar por Defecto
+                    } elseif ($scope === 'single_millar') {
+                        // Modo Millar Individual / Reposición (Exactamente $qty etiquetas)
                         $siblingMillar = $product->findSiblingMillarProduct();
+                        $targetProduct = $siblingMillar ?: $product;
                         $effectiveName = ($product->hasBultoPackaging() && $siblingMillar) ? mb_strtoupper($siblingMillar->name, 'UTF-8') : $prodName;
                         $effectiveSku = ($product->hasBultoPackaging() && $siblingMillar) ? ($siblingMillar->sku ?? $sku) : $sku;
+
+                        $effectiveBatchCode = $batchCode;
+                        $isVariableWeight = false;
+                        $effectiveWeight = 0.0;
+
+                        if (!empty($customWeight)) {
+                            $isVariableWeight = true;
+                            $effectiveWeight = $customWeight;
+                            $grading = $targetProduct->calculateWeightQualityGrade($customWeight, 1, 0);
+                            $calcGrade = $grading['grade'];
+                            if (!preg_match('/-[ABC]$/i', $effectiveBatchCode)) {
+                                $effectiveBatchCode .= "-{$calcGrade}";
+                            } else {
+                                $effectiveBatchCode = preg_replace('/-[ABC]$/i', "-{$calcGrade}", $effectiveBatchCode);
+                            }
+                        }
+
+                        for ($m = 1; $m <= $qty; $m++) {
+                            $qr = $product->sku ? 'PKG-' . $product->sku . '-M' . $m . '-' . strtoupper(Str::random(4)) : ('PKG-M-' . strtoupper(Str::random(8)));
+                            $labels[] = [
+                                'id'                => $product->id,
+                                'index'             => $m,
+                                'total_in_batch'    => $qty,
+                                'product_name'      => $effectiveName,
+                                'presentation_info' => $nameDescribesPackaging ? '' : "1 MILLAR",
+                                'operator_name'     => $catalogOperatorName,
+                                'production_date'   => $productionDate,
+                                'approver_name'     => Auth::user()->name ?? 'Supervisor',
+                                'is_variable'       => $isVariableWeight,
+                                'weight_kg'         => $effectiveWeight,
+                                'batch_code'        => $effectiveBatchCode,
+                                'qr_code'           => $qr,
+                                'sku'               => $effectiveSku,
+                                'label_type'        => 'millar',
+                            ];
+                        }
+                    } else {
+                        // Modo Millar por Defecto (Desglose Bulto Completo)
+                        $siblingMillar = $product->findSiblingMillarProduct();
+                        $targetProduct = $siblingMillar ?: $product;
+                        $effectiveName = ($product->hasBultoPackaging() && $siblingMillar) ? mb_strtoupper($siblingMillar->name, 'UTF-8') : $prodName;
+                        $effectiveSku = ($product->hasBultoPackaging() && $siblingMillar) ? ($siblingMillar->sku ?? $sku) : $sku;
+
+                        $effectiveBatchCode = $batchCode;
+                        $isVariableWeight = false;
+                        $effectiveWeight = 0.0;
+
+                        if (!empty($customWeight)) {
+                            $isVariableWeight = true;
+                            $effectiveWeight = $customWeight;
+                            $grading = $targetProduct->calculateWeightQualityGrade($customWeight, 1, 0);
+                            $calcGrade = $grading['grade'];
+                            if (!preg_match('/-[ABC]$/i', $effectiveBatchCode)) {
+                                $effectiveBatchCode .= "-{$calcGrade}";
+                            } else {
+                                $effectiveBatchCode = preg_replace('/-[ABC]$/i', "-{$calcGrade}", $effectiveBatchCode);
+                            }
+                        }
 
                         $millarCount = ($millarPerBulto > 1) ? (int)$millarPerBulto : 1;
                         $totalMillares = $qty * $millarCount;
@@ -708,9 +860,9 @@ class LabelGeneratorController extends Controller
                                     'operator_name'     => $catalogOperatorName,
                                     'production_date'   => $productionDate,
                                     'approver_name'     => Auth::user()->name ?? 'Supervisor',
-                                    'is_variable'       => false,
-                                    'weight_kg'         => 0.0,
-                                    'batch_code'        => $batchCode,
+                                    'is_variable'       => $isVariableWeight,
+                                    'weight_kg'         => $effectiveWeight,
+                                    'batch_code'        => $effectiveBatchCode,
                                     'qr_code'           => $qr,
                                     'sku'               => $effectiveSku,
                                     'label_type'        => 'millar',
@@ -747,6 +899,12 @@ class LabelGeneratorController extends Controller
         if ($template === 'sheet') {
             $pdf = Pdf::loadView('pdf.labels_sheet_qr', compact('labels'));
             $pdf->setPaper('letter', 'portrait');
+        } elseif ($template === '60x30mm') {
+            $pdf = Pdf::loadView('bag_factory.ticket_pdf', [
+                'labels' => $labels,
+                'size'   => '60x30mm',
+            ]);
+            $pdf->setPaper([0, 0, 170.1, 85.0 * max(1, count($labels))], 'portrait');
         } elseif ($template === '58mm') {
             $pdf = Pdf::loadView('bag_factory.ticket_pdf', [
                 'labels' => $labels,

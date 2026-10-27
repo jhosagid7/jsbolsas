@@ -309,10 +309,11 @@ class CloudSyncService
                     'phone'                => $u->phone,
                     'profile'              => $u->profile ?: $u->role ?: 'operario',
                     'role'                 => $u->role ?: $u->profile ?: 'operario',
+                    'status'               => $u->status ?? 'Active',
                     'weekly_salary'        => (float)$u->weekly_salary,
                     'work_days_per_week'   => (int)$u->work_days_per_week,
                     'pay_partial_packages' => (bool)$u->pay_partial_packages,
-                    'updated_at'           => $u->updated_at ? $u->updated_at->toISOString() : null,
+                    'updated_at'           => $u->updated_at ? $u->updated_at->format('Y-m-d H:i:s') : null,
                 ];
             })->toArray();
 
@@ -440,6 +441,12 @@ class CloudSyncService
                             'work_days_per_week'   => (int)($uData['work_days_per_week'] ?? $existingUser->work_days_per_week),
                             'pay_partial_packages' => (bool)($uData['pay_partial_packages'] ?? $existingUser->pay_partial_packages),
                         ];
+                        if (!empty($uData['password'])) {
+                            $updateData['password'] = $uData['password'];
+                        }
+                        if (Schema::hasColumn('users', 'status') && !empty($uData['status'])) {
+                            $updateData['status'] = $uData['status'];
+                        }
                         if (Schema::hasColumn('users', 'role')) {
                             $updateData['role'] = $profileVal;
                         }
@@ -458,7 +465,7 @@ class CloudSyncService
                             'updated_at'           => now(),
                         ];
                         if (Schema::hasColumn('users', 'status')) {
-                            $insertData['status'] = 'Active';
+                            $insertData['status'] = $uData['status'] ?? 'Active';
                         }
                         if (Schema::hasColumn('users', 'role')) {
                             $insertData['role'] = $profileVal;
@@ -737,7 +744,9 @@ class CloudSyncService
      */
     public function pushDeltas(?Carbon $since = null): array
     {
-        $payload = $this->exportDeltas($since ?: $this->getLastSyncTime());
+        // Margen de seguridad de 2 horas para garantizar que no se pierdan cambios por reloj
+        $effectiveSince = $since ?: ($this->getLastSyncTime() ? $this->getLastSyncTime()->copy()->subHours(2) : null);
+        $payload = $this->exportDeltas($effectiveSince);
         $totalItems = count($payload['machines'] ?? [])
             + count($payload['shifts'] ?? [])
             + count($payload['productions'] ?? [])
@@ -780,14 +789,16 @@ class CloudSyncService
         if ($forceFull || RawMaterial::count() === 0 || BagProduct::count() === 0) {
             $querySince = null;
         } else {
-            $querySince = $since ?: $this->getLastSyncTime();
+            // Margen de seguridad con overlap de 2 horas para evitar desfases de zona horaria o de reloj
+            $lastSync = $since ?: $this->getLastSyncTime();
+            $querySince = $lastSync ? $lastSync->copy()->subHours(2) : null;
         }
 
         $response = Http::timeout(25)
             ->withHeaders(['X-Sync-Token' => $this->syncToken])
             ->post("{$this->cloudUrl}/api/cloud-sync/pull", [
                 'node_role' => $this->nodeRole,
-                'since'     => $querySince ? $querySince->toISOString() : null,
+                'since'     => $querySince ? $querySince->format('Y-m-d H:i:s') : null,
             ]);
 
         if (!$response->successful()) {
