@@ -166,4 +166,39 @@ class CatalogBagProductAvailabilityTest extends TestCase
         $this->assertNotNull($foundFuelle, 'El buscador debe encontrar la bolsa 22x60 Fuelle C-2');
         $this->assertNotNull($foundPlana, 'El buscador debe encontrar la bolsa 22x60 Plana C-2');
     }
+
+    /** @test */
+    public function it_can_create_and_query_vivero_10x22_c7_product()
+    {
+        $prodVivero = BagProduct::create([
+            'sku' => 'B0410X22C7',
+            'name' => 'BOLSA DE VIVERO 10X22 C-7 (10 MILLARES)',
+            'category' => 'General',
+            'material_type' => 'Baja Densidad',
+            'production_formula_id' => 1,
+            'sale_unit' => 'BULTO',
+            'millar_per_bulto' => 10.0,
+            'width_inch' => 10.0,
+            'length_inch' => 22.0,
+            'gusset_cm' => 0.0,
+            'gauge_caliber' => 0.0070,
+            'unit_weight_kg' => 15.4,
+            'cost' => 44.50,
+            'price' => 52.03,
+            'is_active' => true,
+        ]);
+
+        $this->assertTrue((bool)$prodVivero->is_active);
+        $this->assertEquals('B0410X22C7', $prodVivero->sku);
+        $this->assertEquals(0.0070, (float)$prodVivero->gauge_caliber);
+        $this->assertEquals(10.0, (float)$prodVivero->millar_per_bulto);
+        $this->assertEquals(1.54, (float)$prodVivero->theoretical_weight_kg);
+
+        // Validar que el generador de etiquetas lo localiza
+        $activeProducts = BagProduct::where('is_active', true)->orderBy('name')->get();
+        $found = $activeProducts->first(fn($p) => $p->sku === 'B0410X22C7' || (str_contains(strtoupper($p->name), '10X22') && str_contains(strtoupper($p->name), 'VIVERO')));
+
+        $this->assertNotNull($found, 'El buscador debe encontrar la bolsa de vivero 10x22 C-7');
+        $this->assertEquals('BULTO', $found->sale_unit);
+    }
 }
