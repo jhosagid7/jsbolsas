@@ -69,7 +69,7 @@
                                 </thead>
                                 <tbody>
                                     @forelse($products as $p)
-                                        <tr class="catalog-row" data-name="{{ strtolower($p->name) }}" data-sku="{{ strtolower($p->sku ?? '') }}">
+                                        <tr class="catalog-row" data-name="{{ strtolower($p->name) }}" data-sku="{{ strtolower($p->sku ?? '') }}" data-unit="{{ strtolower($p->sale_unit ?? '') }}" data-cat="{{ strtolower($p->category ?? '') }}">
                                             <td>
                                                 <strong class="text-white d-block">{{ $p->name }}</strong>
                                                 <small class="text-white-50 font-monospace">{{ $p->sku ?: 'S/SKU' }}</small>
@@ -437,28 +437,77 @@
         document.getElementById('labelForm').submit();
     }
 
-    // Buscador Catálogo
+    // Función de normalización de texto (sin acentos, minúsculas)
+    function normalizeSearchText(str) {
+        return (str || '')
+            .toString()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    // Algoritmo de Búsqueda Inteligente Multitoken y Medidas Fuzzy (ej: '1022' con '10X22', 'vivero 1022')
+    function matchSmartSearch(targetText, query) {
+        const qNorm = normalizeSearchText(query.trim());
+        if (!qNorm) return true;
+
+        const normTarget = normalizeSearchText(targetText);
+        const normTargetAlnum = normTarget.replace(/[^0-9a-z]/g, '');
+        const normTargetDigits = normTarget.replace(/[^0-9]/g, '');
+        // Generar variantes para medidas: '10x22' -> genera '1022 10x22'
+        const targetWithDimVariants = normTarget.replace(/(\d+)\s*[x\*]\s*(\d+)/g, '$1$2 $1x$2');
+
+        const tokens = qNorm.split(/\s+/).filter(Boolean);
+
+        return tokens.every(token => {
+            // 1. Coincidencia directa o en variante de medidas
+            if (normTarget.includes(token) || targetWithDimVariants.includes(token)) {
+                return true;
+            }
+
+            // 2. Coincidencia alfanumérica sin guiones/espacios (ej: 'c-7' con 'c7', '10-22' con '1022')
+            const cleanToken = token.replace(/[^0-9a-z]/g, '');
+            if (cleanToken.length > 1 && normTargetAlnum.includes(cleanToken)) {
+                return true;
+            }
+
+            // 3. Coincidencia numérica pura para medidas de 3+ dígitos (ej: '1022' con '10x22', '2030' con '20x30')
+            const numericToken = token.replace(/[^0-9]/g, '');
+            if (numericToken.length >= 3 && normTargetDigits.includes(numericToken)) {
+                return true;
+            }
+
+            return false;
+        });
+    }
+
+    // Buscador Inteligente Catálogo (admite cualquier orden de palabras y números sin 'X')
     document.getElementById('searchCatalog').addEventListener('input', function(e) {
-        const query = e.target.value.toLowerCase();
+        const query = e.target.value;
         document.querySelectorAll('.catalog-row').forEach(row => {
             const name = row.getAttribute('data-name') || '';
             const sku = row.getAttribute('data-sku') || '';
-            row.style.display = (name.includes(query) || sku.includes(query)) ? '' : 'none';
+            const unit = row.getAttribute('data-unit') || '';
+            const cat = row.getAttribute('data-cat') || '';
+            const fullTarget = `${name} ${sku} ${unit} ${cat}`;
+
+            row.style.display = matchSmartSearch(fullTarget, query) ? '' : 'none';
         });
     });
 
-    // Filtros Báscula (Texto + Selector de Operario)
+    // Filtros Inteligentes Báscula (Texto + Selector de Operario)
     function filterScaleRows() {
-        const query = (document.getElementById('searchScale').value || '').toLowerCase();
+        const query = document.getElementById('searchScale').value || '';
         const opFilter = (document.getElementById('filterOperatorScale').value || '').toLowerCase();
 
         document.querySelectorAll('.scale-row').forEach(row => {
             const name = row.getAttribute('data-name') || '';
             const op = row.getAttribute('data-operator') || '';
             const qr = row.getAttribute('data-qr') || '';
+            const fullText = `${name} ${op} ${qr}`;
 
-            const matchesText = !query || name.includes(query) || op.includes(query) || qr.includes(query);
-            const matchesOperator = !opFilter || op.includes(opFilter);
+            const matchesText = matchSmartSearch(fullText, query);
+            const matchesOperator = !opFilter || op.toLowerCase().includes(opFilter);
 
             row.style.display = (matchesText && matchesOperator) ? '' : 'none';
         });

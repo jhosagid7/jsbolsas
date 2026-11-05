@@ -1140,7 +1140,10 @@
     }
 
     productsCatalog.forEach(p => {
-        p._searchStr = normalizeStr(`${p.name} ${p.sku} ${p.category || ''} ${p.sale_unit} ${p.material || ''}`);
+        p._searchStr = normalizeStr(`${p.name} ${p.sku} ${p.category || ''} ${p.sale_unit || ''} ${p.material || ''}`);
+        p._searchAlnum = p._searchStr.replace(/[^0-9a-z]/g, '');
+        p._searchDigits = p._searchStr.replace(/[^0-9]/g, '');
+        p._searchDim = p._searchStr.replace(/(\d+)\s*[x\*]\s*(\d+)/g, '$1$2 $1x$2');
     });
 
     let currentFiltered = [];
@@ -1400,7 +1403,19 @@
         if (!tokens.length) {
             currentFiltered = pool.slice(0, 30);
         } else {
-            currentFiltered = pool.filter(p => tokens.every(tok => p._searchStr.includes(tok)));
+            currentFiltered = pool.filter(p => {
+                return tokens.every(tok => {
+                    // 1. Coincidencia directa o variantes de medidas (10x22 / 1022)
+                    if (p._searchStr.includes(tok) || p._searchDim.includes(tok)) return true;
+                    // 2. Coincidencia alfanumérica sin guiones (c-7 / c7)
+                    const cleanTok = tok.replace(/[^0-9a-z]/g, '');
+                    if (cleanTok.length > 1 && p._searchAlnum.includes(cleanTok)) return true;
+                    // 3. Coincidencia numérica pura de 3+ dígitos (1022 / 2030)
+                    const numTok = tok.replace(/[^0-9]/g, '');
+                    if (numTok.length >= 3 && p._searchDigits.includes(numTok)) return true;
+                    return false;
+                });
+            });
         }
 
         if (resetHighlight) {
