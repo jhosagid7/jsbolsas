@@ -111,4 +111,59 @@ class CatalogBagProductAvailabilityTest extends TestCase
         $this->assertEquals('BULTO', $exportedProd['sale_unit']);
         $this->assertEquals(20.0, (float)$exportedProd['millar_per_bulto']);
     }
+
+    /** @test */
+    public function it_can_create_and_query_22x60_c2_fuelle_and_plana_products()
+    {
+        // 1. Crear producto 22x60 Fuelle C-2
+        $prodFuelle = BagProduct::create([
+            'sku' => 'B04BAF226',
+            'name' => 'BOLSA ALTA FUELLE 22X60 C-2 1 MILLAR',
+            'category' => 'General',
+            'material_type' => 'Baja Densidad',
+            'production_formula_id' => 5,
+            'sale_unit' => 'MILLAR',
+            'millar_per_bulto' => 1000.0,
+            'width_inch' => 22.0,
+            'length_inch' => 60.0,
+            'gusset_cm' => 0.0,
+            'gauge_caliber' => 0.0020,
+            'unit_weight_kg' => 2.6400,
+            'cost' => 10.21,
+            'price' => 11.2310,
+            'is_active' => true,
+        ]);
+
+        // 2. Crear producto 22x60 Plana C-2
+        $prodPlana = BagProduct::create([
+            'sku' => 'B04BAP2260',
+            'name' => 'BOLSA ALTA PLANA 22X60 C-2 1 MILLAR',
+            'category' => 'General',
+            'material_type' => 'Baja Densidad',
+            'production_formula_id' => 5,
+            'sale_unit' => 'MILLAR',
+            'millar_per_bulto' => 1000.0,
+            'width_inch' => 22.0,
+            'length_inch' => 60.0,
+            'gusset_cm' => 0.0,
+            'gauge_caliber' => 0.0020,
+            'unit_weight_kg' => 2.6400,
+            'cost' => 10.21,
+            'price' => 11.2310,
+            'is_active' => true,
+        ]);
+
+        $this->assertTrue((bool)$prodFuelle->is_active);
+        $this->assertTrue((bool)$prodPlana->is_active);
+        $this->assertEquals(0.0020, (float)$prodFuelle->gauge_caliber);
+        $this->assertEquals(0.0020, (float)$prodPlana->gauge_caliber);
+
+        // Validar búsqueda en catálogo como en LabelGeneratorController
+        $activeProducts = BagProduct::where('is_active', true)->orderBy('name')->get();
+        $foundFuelle = $activeProducts->first(fn($p) => $p->sku === 'B04BAF226' || (str_contains(strtoupper($p->name), '22X60') && str_contains(strtoupper($p->name), 'FUELLE') && str_contains(strtoupper($p->name), 'C-2')));
+        $foundPlana = $activeProducts->first(fn($p) => $p->sku === 'B04BAP2260' || (str_contains(strtoupper($p->name), '22X60') && str_contains(strtoupper($p->name), 'PLANA') && str_contains(strtoupper($p->name), 'C-2')));
+
+        $this->assertNotNull($foundFuelle, 'El buscador debe encontrar la bolsa 22x60 Fuelle C-2');
+        $this->assertNotNull($foundPlana, 'El buscador debe encontrar la bolsa 22x60 Plana C-2');
+    }
 }
